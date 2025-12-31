@@ -82,15 +82,12 @@ copy_repo_to_opt() {
 
 ensure_venv_and_deps() {
   # Этот блок делает best-effort установку зависимостей.
-  # Если у тебя другой способ (poetry/uv/pip-tools) — скажи, подстрою.
   echo "Ensuring venv and dependencies in $TARGET_DIR/.venv"
 
   sudo -u "$SERVICE_USER" -H bash -lc "
     set -e
     cd '$TARGET_DIR'
-    if [ ! -d .venv ]; then
       python3 -m venv .venv
-    fi
     . .venv/bin/activate
     python -m pip install -U pip wheel setuptools
 
@@ -107,21 +104,24 @@ ensure_venv_and_deps() {
 
 write_env_file() {
   echo
+
   BOT_TOKEN="$(prompt_secret BOT_TOKEN)"
   DATABASE_URL="$(prompt_secret DATABASE_URL)"
   PUBLIC_BASE_URL="$(prompt_value PUBLIC_BASE_URL)"
 
   echo "Writing env file: $ENV_FILE"
   umask 077
+
   cat > "$ENV_FILE" <<EOF
-BOT_TOKEN=${BOT_TOKEN}
-DATABASE_URL=${DATABASE_URL}
-PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
+BOT_TOKEN="${BOT_TOKEN}"
+DATABASE_URL="${DATABASE_URL}"
+PUBLIC_BASE_URL="${PUBLIC_BASE_URL}"
 EOF
 
   chown "${SERVICE_USER}:${SERVICE_GROUP}" "$ENV_FILE"
   chmod 0600 "$ENV_FILE"
 }
+
 
 run_migrations() {
   echo "Running migrations: python migrate.py"
@@ -165,6 +165,10 @@ enable_and_start() {
   systemctl --no-pager status "${SERVICES[@]}"
 }
 
+install_deps() {
+    apt install rsync python3.12-venv
+}
+
 # --- main ---
 require_root
 
@@ -178,6 +182,8 @@ echo "Target dir: $TARGET_DIR"
 echo "Service user: $SERVICE_USER"
 echo
 
+
+install_deps
 ensure_user
 copy_repo_to_opt "$REPO_ROOT"
 ensure_venv_and_deps
