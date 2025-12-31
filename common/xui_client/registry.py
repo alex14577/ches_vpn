@@ -109,6 +109,7 @@ def _buildVlessRealityLink(
         f"&encryption=none"
         f"&path={pathEnc}"
         f"&host={hostEnc}"
+        f"&flow=xtls-rprx-vision"
         f"&mode={quote(str(mode), safe='')}"
         f"&security=reality"
         f"&pbk={quote(str(pbk), safe='')}"
