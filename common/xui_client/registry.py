@@ -104,7 +104,7 @@ def _buildVlessRealityLink(
     frag = quote(email or "", safe="")
 
     return (
-        f"vless://{userId}@{serverHost}:{port}/"
+        f"vless://{userId}@{serverHost}:{port}"
         f"?type={quote(str(type_), safe='')}"
         f"&encryption=none"
         f"&path={pathEnc}"
