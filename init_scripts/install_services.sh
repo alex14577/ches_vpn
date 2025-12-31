@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# --- constants ---
 TARGET_DIR="/opt/vpn"
 SERVICE_USER="alex"
 SERVICE_GROUP="alex"
@@ -14,12 +13,28 @@ SERVICES=(
   vpn-subscription.service
 )
 
-# --- helpers ---
 require_root() {
   if [[ "$EUID" -ne 0 ]]; then
     echo "ERROR: run as root (use sudo)"
     exit 1
   fi
+}
+
+ensure_packages() {
+  echo "Installing base packages"
+  apt-get update -y
+  apt-get install -y rsync python3 python3-venv python3-pip ca-certificates curl
+}
+
+ensure_postgres() {
+  echo "Installing PostgreSQL (local)"
+  apt-get install -y postgresql postgresql-contrib
+
+  systemctl enable --now postgresql
+  systemctl is-active --quiet postgresql || {
+    echo "ERROR: postgresql service is not active"
+    exit 1
+  }
 }
 
 ensure_user() {
@@ -64,7 +79,6 @@ copy_repo_to_opt() {
   echo "Copying repository to $TARGET_DIR"
   mkdir -p "$TARGET_DIR"
 
-  # чистое копирование, без .git и мусора
   rsync -a --delete \
     --exclude ".git/" \
     --exclude ".venv/" \
@@ -81,7 +95,6 @@ copy_repo_to_opt() {
 }
 
 ensure_venv_and_deps() {
-  # Этот блок делает best-effort установку зависимостей.
   echo "Ensuring venv and dependencies in $TARGET_DIR/.venv"
 
   sudo -u "$SERVICE_USER" -H bash -lc "
@@ -93,11 +106,9 @@ ensure_venv_and_deps() {
 
     if [ -f requirements.txt ]; then
       pip install -r requirements.txt
-    elif [ -f pyproject.toml ]; then
-      echo 'WARNING: pyproject.toml found, but installer supports requirements.txt by default.'
-      echo '         Add requirements.txt or adapt install.sh for poetry/uv.'
     else
-      echo 'WARNING: No requirements.txt/pyproject.toml found; skipping deps install.'
+      echo 'ERROR: requirements.txt not found. Add it or adapt installer for poetry/uv.'
+      exit 1
     fi
   "
 }
@@ -111,11 +122,10 @@ write_env_file() {
 
   echo "Writing env file: $ENV_FILE"
   umask 077
-
   cat > "$ENV_FILE" <<EOF
-BOT_TOKEN="${BOT_TOKEN}"
-DATABASE_URL="${DATABASE_URL}"
-PUBLIC_BASE_URL="${PUBLIC_BASE_URL}"
+BOT_TOKEN=${BOT_TOKEN}
+DATABASE_URL=${DATABASE_URL}
+PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
 EOF
 
   chown "${SERVICE_USER}:${SERVICE_GROUP}" "$ENV_FILE"
@@ -129,7 +139,9 @@ run_migrations() {
     set -e
     cd '$TARGET_DIR'
     . .venv/bin/activate
-    export \$(grep -v '^#' '$ENV_FILE' | xargs)
+    set -a
+    . '$ENV_FILE'
+    set +a
     python migrate.py
   "
 }
@@ -138,17 +150,17 @@ install_units() {
   local unit_src_dir="$1"
 
   echo "Installing systemd unit files into $UNIT_DST_DIR"
-  for service in "${SERVICES[@]}"; do
-    local src="$unit_src_dir/$service"
-    local dst="$UNIT_DST_DIR/$service"
+  for service in \"${SERVICES[@]}\"; do
+    src=\"$unit_src_dir/\$service\"
+    dst=\"$UNIT_DST_DIR/\$service\"
 
-    if [[ ! -f "$src" ]]; then
-      echo "ERROR: unit file not found: $src"
+    if [[ ! -f \"\$src\" ]]; then
+      echo \"ERROR: unit file not found: \$src\"
       exit 1
     fi
 
-    echo "→ $service"
-    install -m 0644 "$src" "$dst"
+    echo \"→ \$service\"
+    install -m 0644 \"\$src\" \"\$dst\"
   done
 
   systemctl daemon-reload
@@ -165,14 +177,9 @@ enable_and_start() {
   systemctl --no-pager status "${SERVICES[@]}"
 }
 
-install_deps() {
-    apt install rsync python3.12-venv
-}
-
 # --- main ---
 require_root
 
-# определить корень репо как директорию на уровень выше init_scripts
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 UNIT_SRC_DIR="$SCRIPT_DIR"
@@ -182,8 +189,8 @@ echo "Target dir: $TARGET_DIR"
 echo "Service user: $SERVICE_USER"
 echo
 
-
-install_deps
+ensure_packages
+ensure_postgres
 ensure_user
 copy_repo_to_opt "$REPO_ROOT"
 ensure_venv_and_deps
