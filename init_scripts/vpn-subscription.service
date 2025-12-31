@@ -1,0 +1,25 @@
+[Unit]
+Description=VPN Subscription Service (Uvicorn)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=alex
+Group=alex
+WorkingDirectory=/opt/vpn
+
+EnvironmentFile=/opt/vpn/.env.systemd
+
+ExecStart=/opt/vpn/.venv/bin/uvicorn subscription_service.main:app \
+  --host 0.0.0.0 --port 33333 \
+  --proxy-headers --forwarded-allow-ips='*'
+
+Restart=always
+RestartSec=3
+
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
