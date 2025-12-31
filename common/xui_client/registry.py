@@ -102,6 +102,9 @@ def _buildVlessRealityLink(
 
     # fragment (#...) лучше энкодить
     frag = quote(email or "", safe="")
+    flow = ""
+    if type_ == "tcp":
+        flow = f"&flow={quote('xtls-rprx-vision', safe='')}"
 
     return (
         f"vless://{userId}@{serverHost}:{port}"
@@ -109,7 +112,7 @@ def _buildVlessRealityLink(
         f"&encryption=none"
         f"&path={pathEnc}"
         f"&host={hostEnc}"
-        f"&flow=xtls-rprx-vision"
+        f"{flow}"
         f"&mode={quote(str(mode), safe='')}"
         f"&security=reality"
         f"&pbk={quote(str(pbk), safe='')}"
