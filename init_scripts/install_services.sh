@@ -105,9 +105,9 @@ ensure_venv_and_deps() {
 write_env_file() {
   echo
 
-  BOT_TOKEN="$(prompt_secret BOT_TOKEN)"
-  DATABASE_URL="$(prompt_secret DATABASE_URL)"
-  PUBLIC_BASE_URL="$(prompt_value PUBLIC_BASE_URL)"
+  BOT_TOKEN="$(prompt_secret BOT_TOKEN | tr -d '\r\n')"
+  DATABASE_URL="$(prompt_secret DATABASE_URL | tr -d '\r\n')"
+  PUBLIC_BASE_URL="$(prompt_value PUBLIC_BASE_URL | tr -d '\r\n')"
 
   echo "Writing env file: $ENV_FILE"
   umask 077
