@@ -177,6 +177,48 @@ enable_and_start() {
   systemctl --no-pager status "${SERVICES[@]}"
 }
 
+ensure_postgres_role_and_db() {
+  echo "Ensuring PostgreSQL role and database from DATABASE_URL"
+
+  # распарсим DATABASE_URL
+  # пример: postgresql+psycopg://alex:1234@localhost:5432/app
+  local url="$DATABASE_URL"
+
+  local user password host port db
+  user="$(echo "$url" | sed -E 's|.*://([^:]+):.*|\1|')"
+  password="$(echo "$url" | sed -E 's|.*://[^:]+:([^@]+)@.*|\1|')"
+  host="$(echo "$url" | sed -E 's|.*@([^:/]+).*|\1|')"
+  port="$(echo "$url" | sed -E 's|.*:([0-9]+)/.*|\1|')"
+  db="$(echo "$url" | sed -E 's|.*/([^/?]+).*|\1|')"
+
+  # работаем только если локальная БД
+  if [[ "$host" != "localhost" && "$host" != "127.0.0.1" ]]; then
+    echo "Remote PostgreSQL detected ($host), skipping role/db creation"
+    return 0
+  fi
+
+  echo "Postgres user: $user"
+  echo "Postgres db:   $db"
+
+  sudo -u postgres psql <<SQL
+DO \$\$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '$user') THEN
+    CREATE ROLE $user LOGIN PASSWORD '$password';
+  END IF;
+END
+\$\$;
+
+DO \$\$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = '$db') THEN
+    CREATE DATABASE $db OWNER $user;
+  END IF;
+END
+\$\$;
+SQL
+}
+
 # --- main ---
 require_root
 
@@ -195,6 +237,7 @@ ensure_user
 copy_repo_to_opt "$REPO_ROOT"
 ensure_venv_and_deps
 write_env_file
+ensure_postgres_role_and_db
 run_migrations
 install_units "$UNIT_SRC_DIR"
 enable_and_start
