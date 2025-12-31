@@ -159,12 +159,11 @@ url2 = url.replace("postgresql+psycopg://", "postgresql://", 1)\
           .replace("postgresql+asyncpg://", "postgresql://", 1)
 
 u = urlparse(url2)
-
 user = u.username or ""
 password = u.password or ""
 host = u.hostname or "localhost"
 port = u.port or 5432
-db = (u.path or "/")[1:]
+db = (u.path or "/")[1:]  # strip leading /
 
 print(f"{user}\n{password}\n{host}\n{port}\n{db}")
 PY
@@ -191,6 +190,7 @@ PY
   echo "Postgres db:   $pg_db"
   echo "Postgres port: $pg_port"
 
+  # 1) Ensure role (OK to do in DO)
   sudo -u postgres psql -v ON_ERROR_STOP=1 <<SQL
 DO \$\$
 BEGIN
@@ -203,16 +203,15 @@ END
 \$\$;
 SQL
 
-  sudo -u postgres psql -v ON_ERROR_STOP=1 <<SQL
-DO \$\$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = '$pg_db') THEN
-    CREATE DATABASE $pg_db OWNER $pg_user;
-  END IF;
-END
-\$\$;
-SQL
+  # 2) Ensure database (MUST be outside transaction/DO)
+  if sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname = '$pg_db'" | grep -q 1; then
+    echo "Database '$pg_db' already exists"
+  else
+    echo "Creating database '$pg_db' owned by '$pg_user'"
+    sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE DATABASE $pg_db OWNER $pg_user;"
+  fi
 }
+
 
 run_migrations() {
   echo "Running migrations: python migrate.py"
