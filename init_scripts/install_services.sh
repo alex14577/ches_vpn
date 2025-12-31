@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# --- constants ---
 TARGET_DIR="/opt/vpn"
 SERVICE_USER="alex"
 SERVICE_GROUP="alex"
@@ -13,6 +14,7 @@ SERVICES=(
   vpn-subscription.service
 )
 
+# --- helpers ---
 require_root() {
   if [[ "$EUID" -ne 0 ]]; then
     echo "ERROR: run as root (use sudo)"
@@ -29,7 +31,6 @@ ensure_packages() {
 ensure_postgres() {
   echo "Installing PostgreSQL (local)"
   apt-get install -y postgresql postgresql-contrib
-
   systemctl enable --now postgresql
   systemctl is-active --quiet postgresql || {
     echo "ERROR: postgresql service is not active"
@@ -100,7 +101,9 @@ ensure_venv_and_deps() {
   sudo -u "$SERVICE_USER" -H bash -lc "
     set -e
     cd '$TARGET_DIR'
+    if [ ! -d .venv ]; then
       python3 -m venv .venv
+    fi
     . .venv/bin/activate
     python -m pip install -U pip wheel setuptools
 
@@ -113,13 +116,18 @@ ensure_venv_and_deps() {
   "
 }
 
-write_env_file() {
+read_and_export_env() {
   echo
 
   BOT_TOKEN="$(prompt_secret BOT_TOKEN | tr -d '\r\n')"
   DATABASE_URL="$(prompt_secret DATABASE_URL | tr -d '\r\n')"
   PUBLIC_BASE_URL="$(prompt_value PUBLIC_BASE_URL | tr -d '\r\n')"
 
+  # ✅ критично: экспортируем, чтобы видел Python/psql, запускаемые из этого скрипта
+  export BOT_TOKEN DATABASE_URL PUBLIC_BASE_URL
+}
+
+write_env_file() {
   echo "Writing env file: $ENV_FILE"
   umask 077
   cat > "$ENV_FILE" <<EOF
@@ -132,17 +140,89 @@ EOF
   chmod 0600 "$ENV_FILE"
 }
 
+ensure_postgres_role_and_db() {
+  echo "Ensuring PostgreSQL role and database from DATABASE_URL"
+
+  # Парсим URL надёжно через Python (читает DATABASE_URL из env)
+  local parsed
+  parsed="$(python3 - <<'PY'
+import os, sys
+from urllib.parse import urlparse
+
+url = os.environ.get("DATABASE_URL", "")
+if not url:
+    print("ERROR: DATABASE_URL is empty", file=sys.stderr)
+    sys.exit(1)
+
+url2 = url.replace("postgresql+psycopg://", "postgresql://", 1)\
+          .replace("postgresql+psycopg2://", "postgresql://", 1)\
+          .replace("postgresql+asyncpg://", "postgresql://", 1)
+
+u = urlparse(url2)
+
+user = u.username or ""
+password = u.password or ""
+host = u.hostname or "localhost"
+port = u.port or 5432
+db = (u.path or "/")[1:]
+
+print(f"{user}\n{password}\n{host}\n{port}\n{db}")
+PY
+)"
+
+  local pg_user pg_password pg_host pg_port pg_db
+  pg_user="$(echo "$parsed" | sed -n '1p')"
+  pg_password="$(echo "$parsed" | sed -n '2p')"
+  pg_host="$(echo "$parsed" | sed -n '3p')"
+  pg_port="$(echo "$parsed" | sed -n '4p')"
+  pg_db="$(echo "$parsed" | sed -n '5p')"
+
+  if [[ -z "$pg_user" || -z "$pg_db" ]]; then
+    echo "ERROR: failed to parse DATABASE_URL (user or db is empty)"
+    exit 1
+  fi
+
+  if [[ "$pg_host" != "localhost" && "$pg_host" != "127.0.0.1" ]]; then
+    echo "Remote PostgreSQL detected ($pg_host), skipping role/db creation"
+    return 0
+  fi
+
+  echo "Postgres user: $pg_user"
+  echo "Postgres db:   $pg_db"
+  echo "Postgres port: $pg_port"
+
+  sudo -u postgres psql -v ON_ERROR_STOP=1 <<SQL
+DO \$\$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '$pg_user') THEN
+    CREATE ROLE $pg_user LOGIN PASSWORD '$pg_password';
+  ELSE
+    ALTER ROLE $pg_user PASSWORD '$pg_password';
+  END IF;
+END
+\$\$;
+SQL
+
+  sudo -u postgres psql -v ON_ERROR_STOP=1 <<SQL
+DO \$\$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = '$pg_db') THEN
+    CREATE DATABASE $pg_db OWNER $pg_user;
+  END IF;
+END
+\$\$;
+SQL
+}
 
 run_migrations() {
   echo "Running migrations: python migrate.py"
+  # ✅ Передаём env явно в процесс python (на всякий случай)
   sudo -u "$SERVICE_USER" -H bash -lc "
     set -e
     cd '$TARGET_DIR'
     . .venv/bin/activate
-    set -a
-    . '$ENV_FILE'
-    set +a
-    python migrate.py
+    BOT_TOKEN='$BOT_TOKEN' DATABASE_URL='$DATABASE_URL' PUBLIC_BASE_URL='$PUBLIC_BASE_URL' \
+      python migrate.py
   "
 }
 
@@ -150,17 +230,17 @@ install_units() {
   local unit_src_dir="$1"
 
   echo "Installing systemd unit files into $UNIT_DST_DIR"
-  for service in \"${SERVICES[@]}\"; do
-    src=\"$unit_src_dir/\$service\"
-    dst=\"$UNIT_DST_DIR/\$service\"
+  for service in "${SERVICES[@]}"; do
+    local src="$unit_src_dir/$service"
+    local dst="$UNIT_DST_DIR/$service"
 
-    if [[ ! -f \"\$src\" ]]; then
-      echo \"ERROR: unit file not found: \$src\"
+    if [[ ! -f "$src" ]]; then
+      echo "ERROR: unit file not found: $src"
       exit 1
     fi
 
-    echo \"→ \$service\"
-    install -m 0644 \"\$src\" \"\$dst\"
+    echo "→ $service"
+    install -m 0644 "$src" "$dst"
   done
 
   systemctl daemon-reload
@@ -176,86 +256,6 @@ enable_and_start() {
   echo "Done. Status:"
   systemctl --no-pager status "${SERVICES[@]}"
 }
-
-ensure_postgres_role_and_db() {
-  echo "Ensuring PostgreSQL role and database from DATABASE_URL"
-
-  # Парсим URL надёжно через Python
-  local parsed
-  parsed="$(python3 - <<'PY'
-import os, sys
-from urllib.parse import urlparse
-
-url = os.environ.get("DATABASE_URL", "")
-if not url:
-    print("ERROR: DATABASE_URL is empty", file=sys.stderr)
-    sys.exit(1)
-
-# Уберём +driver (postgresql+psycopg -> postgresql) для urlparse
-url2 = url.replace("postgresql+psycopg://", "postgresql://", 1)\
-          .replace("postgresql+psycopg2://", "postgresql://", 1)\
-          .replace("postgresql+asyncpg://", "postgresql://", 1)
-
-u = urlparse(url2)
-
-user = u.username or ""
-password = u.password or ""
-host = u.hostname or ""
-port = u.port or 5432
-db = (u.path or "/")[1:]  # strip leading /
-
-print(f"{user}\n{password}\n{host}\n{port}\n{db}")
-PY
-)"
-
-  local user password host port db
-  user="$(echo "$parsed" | sed -n '1p')"
-  password="$(echo "$parsed" | sed -n '2p')"
-  host="$(echo "$parsed" | sed -n '3p')"
-  port="$(echo "$parsed" | sed -n '4p')"
-  db="$(echo "$parsed" | sed -n '5p')"
-
-  if [[ -z "$user" || -z "$db" ]]; then
-    echo "ERROR: failed to parse DATABASE_URL (user or db is empty)"
-    exit 1
-  fi
-
-  # создаём роль/БД только для локального Postgres
-  if [[ "$host" != "localhost" && "$host" != "127.0.0.1" && "$host" != "" ]]; then
-    echo "Remote PostgreSQL detected ($host), skipping role/db creation"
-    return 0
-  fi
-
-  echo "Postgres user: $user"
-  echo "Postgres db:   $db"
-  echo "Postgres port: $port"
-
-  # 1) роль (если нет) + пароль (если есть)
-  sudo -u postgres psql -v ON_ERROR_STOP=1 <<SQL
-DO \$\$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '$user') THEN
-    CREATE ROLE $user LOGIN PASSWORD '$password';
-  ELSE
-    -- на всякий случай синхронизируем пароль (можно убрать, если не хочешь)
-    ALTER ROLE $user PASSWORD '$password';
-  END IF;
-END
-\$\$;
-SQL
-
-  # 2) база (если нет)
-  sudo -u postgres psql -v ON_ERROR_STOP=1 <<SQL
-DO \$\$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = '$db') THEN
-    CREATE DATABASE $db OWNER $user;
-  END IF;
-END
-\$\$;
-SQL
-}
-
 
 # --- main ---
 require_root
@@ -274,8 +274,10 @@ ensure_postgres
 ensure_user
 copy_repo_to_opt "$REPO_ROOT"
 ensure_venv_and_deps
+read_and_export_env
 write_env_file
 ensure_postgres_role_and_db
 run_migrations
+
 install_units "$UNIT_SRC_DIR"
 enable_and_start
