@@ -1,0 +1,8 @@
+python-telegram-bot==21.9
+
+sqlmodel==0.0.22
+psycopg[binary,pool]==3.2.6
+fastapi
+uvicorn
+# или вместо psycopg:
+# asyncpg==0.29.0
