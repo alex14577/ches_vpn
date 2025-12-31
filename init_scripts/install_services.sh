@@ -180,35 +180,72 @@ enable_and_start() {
 ensure_postgres_role_and_db() {
   echo "Ensuring PostgreSQL role and database from DATABASE_URL"
 
-  # распарсим DATABASE_URL
-  # пример: postgresql+psycopg://alex:1234@localhost:5432/app
-  local url="$DATABASE_URL"
+  # Парсим URL надёжно через Python
+  local parsed
+  parsed="$(python3 - <<'PY'
+import os, sys
+from urllib.parse import urlparse
+
+url = os.environ.get("DATABASE_URL", "")
+if not url:
+    print("ERROR: DATABASE_URL is empty", file=sys.stderr)
+    sys.exit(1)
+
+# Уберём +driver (postgresql+psycopg -> postgresql) для urlparse
+url2 = url.replace("postgresql+psycopg://", "postgresql://", 1)\
+          .replace("postgresql+psycopg2://", "postgresql://", 1)\
+          .replace("postgresql+asyncpg://", "postgresql://", 1)
+
+u = urlparse(url2)
+
+user = u.username or ""
+password = u.password or ""
+host = u.hostname or ""
+port = u.port or 5432
+db = (u.path or "/")[1:]  # strip leading /
+
+print(f"{user}\n{password}\n{host}\n{port}\n{db}")
+PY
+)"
 
   local user password host port db
-  user="$(echo "$url" | sed -E 's|.*://([^:]+):.*|\1|')"
-  password="$(echo "$url" | sed -E 's|.*://[^:]+:([^@]+)@.*|\1|')"
-  host="$(echo "$url" | sed -E 's|.*@([^:/]+).*|\1|')"
-  port="$(echo "$url" | sed -E 's|.*:([0-9]+)/.*|\1|')"
-  db="$(echo "$url" | sed -E 's|.*/([^/?]+).*|\1|')"
+  user="$(echo "$parsed" | sed -n '1p')"
+  password="$(echo "$parsed" | sed -n '2p')"
+  host="$(echo "$parsed" | sed -n '3p')"
+  port="$(echo "$parsed" | sed -n '4p')"
+  db="$(echo "$parsed" | sed -n '5p')"
 
-  # работаем только если локальная БД
-  if [[ "$host" != "localhost" && "$host" != "127.0.0.1" ]]; then
+  if [[ -z "$user" || -z "$db" ]]; then
+    echo "ERROR: failed to parse DATABASE_URL (user or db is empty)"
+    exit 1
+  fi
+
+  # создаём роль/БД только для локального Postgres
+  if [[ "$host" != "localhost" && "$host" != "127.0.0.1" && "$host" != "" ]]; then
     echo "Remote PostgreSQL detected ($host), skipping role/db creation"
     return 0
   fi
 
   echo "Postgres user: $user"
   echo "Postgres db:   $db"
+  echo "Postgres port: $port"
 
-  sudo -u postgres psql <<SQL
+  # 1) роль (если нет) + пароль (если есть)
+  sudo -u postgres psql -v ON_ERROR_STOP=1 <<SQL
 DO \$\$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '$user') THEN
     CREATE ROLE $user LOGIN PASSWORD '$password';
+  ELSE
+    -- на всякий случай синхронизируем пароль (можно убрать, если не хочешь)
+    ALTER ROLE $user PASSWORD '$password';
   END IF;
 END
 \$\$;
+SQL
 
+  # 2) база (если нет)
+  sudo -u postgres psql -v ON_ERROR_STOP=1 <<SQL
 DO \$\$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = '$db') THEN
@@ -218,6 +255,7 @@ END
 \$\$;
 SQL
 }
+
 
 # --- main ---
 require_root
