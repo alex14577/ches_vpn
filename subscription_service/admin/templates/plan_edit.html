@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Edit plan</h1>
+
+<section class="card">
+  <form method="post" action="/admin/plans/{{ plan.id }}/update" class="grid">
+    <label>Code
+      <input value="{{ plan.code }}" disabled />
+    </label>
+    <label>Title
+      <input name="title" value="{{ plan.title }}" required />
+    </label>
+    <label>Description
+      <textarea name="description" rows="3">{{ plan.description }}</textarea>
+    </label>
+    <label>Price (RUB)
+      <input type="number" name="price_rub" value="{{ plan.price_rub }}" required />
+    </label>
+    <label>Duration days
+      <input type="number" name="duration_days" value="{{ plan.duration_days or '' }}" />
+    </label>
+    <label>
+      <input type="checkbox" name="is_active" {% if plan.is_active %}checked{% endif %} /> Active
+    </label>
+    <button type="submit">Save</button>
+  </form>
+</section>
+
+<section class="card">
+  <form method="post" action="/admin/plans/{{ plan.id }}/delete" onsubmit="return confirm('Delete this plan?');">
+    <button type="submit" class="err">Delete plan</button>
+  </form>
+</section>
+
+<p><a href="/admin/plans">← Back to plans</a></p>
+{% endblock %}

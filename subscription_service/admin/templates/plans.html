@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Plans</h1>
+
+<section class="card">
+  <h2>Create plan</h2>
+  <form method="post" action="/admin/plans/create" class="grid">
+    <label>Code <input name="code" required /></label>
+    <label>Title <input name="title" required /></label>
+    <label>Description <input name="description" required /></label>
+    <label>Price (RUB) <input type="number" name="price_rub" required /></label>
+    <label>Duration days <input type="number" name="duration_days" /></label>
+    <label>
+      <input type="checkbox" name="is_active" checked /> Active
+    </label>
+    <button type="submit">Create</button>
+  </form>
+</section>
+
+<section class="card">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Code</th>
+        <th>Title</th>
+        <th>Price</th>
+        <th>Duration</th>
+        <th>Active</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in plans %}
+      <tr>
+        <td>{{ p.code }}</td>
+        <td>{{ p.title }}</td>
+        <td>{{ p.price_rub }}</td>
+        <td>{{ p.duration_days or '∞' }}</td>
+        <td>{{ 'yes' if p.is_active else 'no' }}</td>
+        <td><a href="/admin/plans/{{ p.id }}">Edit</a></td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="6" class="muted">Планов пока нет. Создай первый выше.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

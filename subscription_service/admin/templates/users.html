@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Users</h1>
+
+<section class="card">
+  <h2>Create user</h2>
+  <form method="post" action="/admin/users/create" class="grid">
+    <label>TG user id
+      <input type="number" name="tg_user_id" required />
+    </label>
+    <label>Username
+      <input name="username" />
+    </label>
+    <label>Refer id
+      <input name="refer_id" />
+    </label>
+    <div style="align-self:end">
+      <button type="submit">Create</button>
+    </div>
+  </form>
+</section>
+
+<section class="card">
+  <form method="get" action="/admin/users" class="grid">
+    <label>Search
+      <input name="q" value="{{ q or '' }}" placeholder="tg id / username / token" />
+    </label>
+    <div style="align-self:end">
+      <button type="submit">Search</button>
+    </div>
+  </form>
+</section>
+
+<section class="card">
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>TG ID</th>
+          <th>Username</th>
+          <th>Refer</th>
+          <th>Token</th>
+          <th>Created</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr>
+          <td>{{ u.tg_user_id }}</td>
+          <td>{{ u.username or '—' }}</td>
+          <td>{{ u.refer_id or '—' }}</td>
+          <td style="max-width: 280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ u.subscription_token }}</td>
+          <td>{{ u.created_at }}</td>
+          <td><a href="/admin/users/{{ u.id }}">Edit</a></td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6" class="muted">Пользователей пока нет</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

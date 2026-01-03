@@ -146,23 +146,27 @@ class XuiClient:
         return res.obj
 
 
-    async def del_client(self, inboundId: int, email: str) -> dict[str, Any]:
+    async def delClient(
+        self,
+        inboundId: int,
+        client_uuid: uuid.UUID | str
+        ) -> dict[str, Any]:
         """
-        POST /panel/api/inbounds/{inboundId}/delClientByEmail/{email}
+        POST /panel/api/inbounds/{inboundId}/delClient/{uuid}
         """
         await self.ensure_login()
 
-        r = await self._client.post(f"/panel/api/inbounds/{inboundId}/delClientByEmail/{email}")
+        r = await self._client.post(f"/panel/api/inbounds/{inboundId}/delClient/{client_uuid}")
         if r.status_code != 200:
-            self._raise_http("del_client", r)
+            self._raise_http("delClient", r)
 
         try:
             data = r.json()
         except Exception:
-            raise XuiError(f"del_client failed: invalid json http={r.status_code} body={r.text[:300]}")
+            raise XuiError(f"delClient failed: invalid json http={r.status_code} body={r.text[:300]}")
         if isinstance(data, dict):
             return data
-        raise XuiError(f"del_client unexpected response: {data!r}")
+        raise XuiError(f"delClient unexpected response: {data!r}")
     
     async def clientExists(self, clientId: str) -> bool:
         await self.ensure_login()
@@ -234,7 +238,7 @@ class XuiClient:
         msg = str(data.get("msg", ""))
 
         if retry_on_duplicate and ("Duplicate email" in msg):
-            await self.del_client(inboundId, email)
+            await self.delClient(inboundId, email)
 
             r2 = await do_request()
             if r2.status_code != 200:

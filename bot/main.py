@@ -20,6 +20,7 @@ from common.db import db_call
 from common.adapters import DbAdapters
 from bot.reports import daily_report_task
 from common.logger import Logger, Level
+from common.xui_client.registry import Manager
 from bot.utils import parse_ref_payload
 from bot.actions.handler import handler
 from bot.actions import main_menu
@@ -69,9 +70,10 @@ async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 def build_app() -> Application:
     Logger.configure("bot", level=Level.DEBUG)
-    Logger.silence("telegram", "telegram.ext", "httpx", level=Level.WARNING)
+    Logger.silence("telegram", "telegram.ext", "httpx", "httpcore.http11", "httpcore.connection", level=Level.WARNING)
 
     app = Application.builder().token(BOT_TOKEN).build()
+    app.bot_data["servers_manager"] = Manager()
 
     async def _post_init(application: Application) -> None:
         await application.bot.set_my_commands([

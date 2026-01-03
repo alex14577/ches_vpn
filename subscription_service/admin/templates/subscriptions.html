@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Subscriptions</h1>
+
+{% if err %}<p class="err">{{ err }}</p>{% endif %}
+{% if ok %}<p>✅ Подписка добавлена</p>{% endif %}
+
+<section class="card">
+  <h2>Add subscription</h2>
+
+  <form method="post" action="/admin/subscriptions/create" class="grid">
+    <label>User (tg_user_id or username)
+      <input id="user-input" name="user_query" autocomplete="off" required />
+      <div id="user-suggest" class="suggest"></div>
+    </label>
+
+    <label>Plan
+      <select name="plan_id" required>
+        {% for p in plans %}
+          <option value="{{ p.id }}">{{ p.code }} — {{ p.title }} ({{ p.duration_days or '∞' }}d)</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <div style="align-self:end">
+      <button type="submit">Add</button>
+    </div>
+  </form>
+</section>
+
+<section class="card">
+  <form method="get" action="/admin/subscriptions" class="grid">
+    <label>Search
+      <input name="q" value="{{ q or '' }}" placeholder="tg id / username / plan" />
+    </label>
+    <label>Status
+      <select name="status">
+        <option value="">Any</option>
+        <option value="active" {% if status=='active' %}selected{% endif %}>active</option>
+        <option value="expired" {% if status=='expired' %}selected{% endif %}>expired</option>
+        <option value="canceled" {% if status=='canceled' %}selected{% endif %}>canceled</option>
+      </select>
+    </label>
+    <div style="align-self:end">
+      <button type="submit">Filter</button>
+    </div>
+  </form>
+</section>
+
+<section class="card">
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>User</th>
+          <th>Plan</th>
+          <th>Status</th>
+          <th>Valid from</th>
+          <th>Valid until</th>
+          <th>Created</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>{{ r.user.username or r.user.tg_user_id }}</td>
+          <td>{{ r.plan.code }}</td>
+          <td>{{ r.subscription.status }}</td>
+          <td>{{ r.subscription.valid_from }}</td>
+          <td>{{ r.subscription.valid_until or '—' }}</td>
+          <td>{{ r.subscription.created_at }}</td>
+          <td><a href="/admin/subscriptions/{{ r.subscription.id }}">Edit</a></td> <!-- NEW -->
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" class="muted">Подписок пока нет</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const input = document.getElementById("user-input");
+  const box = document.getElementById("user-suggest");
+
+  console.log("autocomplete init", { input: !!input, box: !!box });
+
+  if (!input || !box) return;
+
+  let timer = null;
+
+  input.addEventListener("input", () => {
+    clearTimeout(timer);
+    const q = input.value.trim();
+    console.log("input:", q);
+
+    timer = setTimeout(async () => {
+      const url = `/admin/api/users/suggest?q=${encodeURIComponent(q)}`;
+      console.log("fetch:", url);
+
+      const res = await fetch(url);
+      console.log("status:", res.status);
+
+      const users = await res.json();
+      box.innerHTML = "";
+
+      for (const u of users) {
+        const div = document.createElement("div");
+        div.className = "suggest-item";
+        div.textContent = u.username ? `${u.username} (${u.tg_user_id})` : String(u.tg_user_id);
+        div.onclick = () => { input.value = u.username || u.tg_user_id; box.innerHTML = ""; };
+        box.appendChild(div);
+      }
+    }, 250);
+  });
+});
+</script>
+
+{% endblock %}

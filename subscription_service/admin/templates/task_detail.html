@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Task</h1>
+
+<section class="card">
+  <div class="grid" style="grid-template-columns: 220px 1fr;">
+    <div><strong>ID</strong></div><div>{{ task.id }}</div>
+    <div><strong>Type</strong></div><div>{{ task.type }}</div>
+    <div><strong>Status</strong></div><div>{{ task.status }}</div>
+    <div><strong>Idempotency key</strong></div><div>{{ task.idempotency_key }}</div>
+    <div><strong>Created</strong></div><div>{{ task.created_at }}</div>
+    <div><strong>Updated</strong></div><div>{{ task.updated_at }}</div>
+    <div><strong>Last error</strong></div><div>{{ task.last_error or '—' }}</div>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Payload</h2>
+  <pre style="white-space: pre-wrap; margin: 0;">{{ task.payload | tojson(indent=2) }}</pre>
+</section>
+
+<p><a href="/admin/tasks">← Back to tasks</a></p>
+{% endblock %}

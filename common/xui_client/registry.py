@@ -194,6 +194,12 @@ class Manager:
         servers = await db_call(lambda db: db.servers.all())
         await self._syncFromDb(servers)
         self._markSynced()
+        
+    async def syncServers(self):
+        servers = await db_call(lambda db: db.servers.all())
+        await self._syncFromDb(servers)
+        self._markSynced()
+        
 
     # добавить клиента на все сервера
     async def syncUser(self, user: User) -> None:
@@ -218,6 +224,31 @@ class Manager:
                 Logger.info('Client "%s" synced on server "%s"', name, client.cfg.api_base_url)
 
         await asyncio.gather(*(syncOne(mc) for mc in self._clients.values()))
+        
+    # Удалить пользователя
+    async def delUser(self, user: User) -> None:
+        await self._ensureSynced()
+
+        userId = str(user.id)
+        name = user.username or str(user.tg_user_id)
+
+        sem = asyncio.Semaphore(5)  # лимит параллельности
+
+        async def delOne(managedClient: ManagedClient) -> None:
+            async with sem:
+                client: XuiClient = managedClient.client
+                inbounds = await client.inbounds()
+
+                for inbound in inbounds:
+                    for c in inbound.settings.clients:
+                        if c.id == userId:
+                            await client.delClient(inbound.id, userId)
+                            break
+
+                Logger.info('Client "%s" synced on server "%s"', name, client.cfg.api_base_url)
+
+        await asyncio.gather(*(delOne(mc) for mc in self._clients.values()))
+    
 
     async def collectConfigs(self, userId: str) -> list[str]:
         await self._ensureSynced()

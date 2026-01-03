@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>{{ title or "Admin" }}</title>
+  <link rel="stylesheet" href="/admin/static/admin.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="brand">ches_vpn admin</div>
+    <nav class="nav">
+      <a href="/admin/servers">Servers</a>
+      <a href="/admin/users">Users</a>
+      <a href="/admin/plans">Plans</a>
+      <a href="/admin/subscriptions">Subscriptions</a>
+      <a href="/admin/tasks">Tasks</a>
+    </nav>
+    <form method="post" action="/admin/logout">
+      <button type="submit">Logout</button>
+    </form>
+  </header>
+
+  <main class="main">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from contextlib import asynccontextmanager
 
 from typing import Optional
 
@@ -9,7 +10,18 @@ from common.db import db_call
 from common.logger import Logger, Level
 from common.xui_client.registry import Manager
 
-app = FastAPI(title="Subscription service")
+from subscription_service.admin.router import admin_router
+from fastapi.staticfiles import StaticFiles
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    app.state.serverManager = Manager()
+    yield
+    # при необходимости: app.state.serverManager.close() / cleanup
+
+app = FastAPI(title="Subscription service", lifespan=lifespan)
+app.include_router(admin_router, prefix="/admin")
+app.mount("/admin/static", StaticFiles(directory="subscription_service/admin/static"), name="admin-static")
 
 serverManager = Manager()
 Logger.configure("subscription_service", level=Level.DEBUG)

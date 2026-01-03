@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Edit subscription</h1>
+
+{% if err %}<p class="err">{{ err }}</p>{% endif %}
+{% if ok %}<p>✅ Saved</p>{% endif %}
+
+<section class="card">
+  <div class="grid" style="grid-template-columns: 220px 1fr;">
+    <div><strong>ID</strong></div><div>{{ subscription.id }}</div>
+    <div><strong>User</strong></div><div>{{ user.username or user.tg_user_id }}</div>
+    <div><strong>Plan</strong></div><div>{{ plan.code }}</div>
+    <div><strong>Status</strong></div><div>{{ subscription.status }}</div>
+    <div><strong>Created</strong></div><div>{{ subscription.created_at }}</div>
+  </div>
+</section>
+
+<section class="card">
+  <form method="post" action="/admin/subscriptions/{{ subscription.id }}/update" class="grid">
+    <label>Valid from (UTC)
+      <input type="datetime-local" name="valid_from"
+             value="{{ subscription.valid_from.strftime('%Y-%m-%dT%H:%M') if subscription.valid_from else '' }}"
+             required />
+    </label>
+
+    <label>Valid until (UTC)
+      <input type="datetime-local" name="valid_until"
+             value="{{ subscription.valid_until.strftime('%Y-%m-%dT%H:%M') if subscription.valid_until else '' }}" />
+    </label>
+
+    <div style="align-self:end">
+      <button type="submit">Save</button>
+    </div>
+  </form>
+</section>
+
+<section class="card">
+  <form method="post" action="/admin/subscriptions/{{ subscription.id }}/delete"
+        onsubmit="return confirm('Delete this subscription?');">
+    <button type="submit" class="err">Delete subscription</button>
+  </form>
+</section>
+
+<p><a href="/admin/subscriptions">← Back to subscriptions</a></p>
+{% endblock %}

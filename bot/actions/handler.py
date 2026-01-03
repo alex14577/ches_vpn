@@ -9,12 +9,15 @@ from telegram.ext import (
 )
 
 from bot.helpers import helpers
-from bot.actions import try_free, main_menu, instructions
+from bot.actions import try_free, main_menu, instructions, say_thanks
+from common.xui_client.registry import Manager
 
 async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query: CallbackQuery | None = update.callback_query
     if query is None or query.from_user is None:
         return
+    
+    serversManager: Manager = context.bot_data["servers_manager"]
 
     await query.answer()
 
@@ -26,9 +29,11 @@ async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     if action == "instruction":
         await instructions.common(chat_id=chat_id, context=context)
+    if action == "say_thanks":
+        await say_thanks.common(chat_id=chat_id, context=context)
 
     elif action == "try_free":
-        sub_url = await try_free.try_free(tg_user_id, username)
+        sub_url = await try_free.try_free(tg_user_id, username, serversManager)
         text = ("📋 <b>Ваша ссылка для подписки</b>\n\n"
                 f"<code>{sub_url}</code>\n\n"
                 "Нажмите на строку, чтобы скопировать.")

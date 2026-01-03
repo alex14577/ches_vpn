@@ -7,8 +7,9 @@ from telegram import (
 def show() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton("📦 Попробовать бесплатно", callback_data="try_free")],
-            [InlineKeyboardButton(           "📖 Инструкция", callback_data="instruction")],
+            [InlineKeyboardButton(  "📦 Попробовать бесплатно", callback_data="try_free")],
+            [InlineKeyboardButton(             "📖 Инструкция", callback_data="instruction")],
+            [InlineKeyboardButton("🙏 Поблагодарить создателя", callback_data="say_thanks")],
         ]
     )
 

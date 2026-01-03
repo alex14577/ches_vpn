@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Tasks</h1>
+
+<section class="card">
+  <form method="get" action="/admin/tasks" class="grid">
+    <label>Search
+      <input name="q" value="{{ q or '' }}" placeholder="id / key / payload" />
+    </label>
+    <label>Status
+      <select name="status">
+        <option value="">Any</option>
+        <option value="pending" {% if status=='pending' %}selected{% endif %}>pending</option>
+        <option value="running" {% if status=='running' %}selected{% endif %}>running</option>
+        <option value="done" {% if status=='done' %}selected{% endif %}>done</option>
+        <option value="failed" {% if status=='failed' %}selected{% endif %}>failed</option>
+      </select>
+    </label>
+    <label>Type
+      <input name="type" value="{{ type or '' }}" />
+    </label>
+    <div style="align-self:end">
+      <button type="submit">Filter</button>
+    </div>
+  </form>
+</section>
+
+<section class="card">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Type</th>
+        <th>Status</th>
+        <th>Created</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in tasks %}
+      <tr>
+        <td>{{ t.id }}</td>
+        <td>{{ t.type }}</td>
+        <td>{{ t.status }}</td>
+        <td>{{ t.created_at }}</td>
+        <td><a href="/admin/tasks/{{ t.id }}">View</a></td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="5" class="muted">Задач пока нет</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}
