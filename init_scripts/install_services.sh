@@ -262,6 +262,29 @@ enable_and_start() {
   systemctl --no-pager status "${SERVICES[@]}"
 }
 
+restart_services() {
+
+  echo "==== $(date -Is) Starting soft restart ===="
+
+  for svc in "${SERVICES[@]}"; do
+    if systemctl is-active --quiet "$svc"; then
+      echo "[$(date -Is)] Restarting $svc"
+
+      if systemctl restart "$svc"; then
+        echo "[$(date -Is)] $svc restarted successfully"
+      else
+        echo "[$(date -Is)] ERROR: failed to restart $svc"
+        systemctl --no-pager --full status "$svc"
+        exit 1
+      fi
+    else
+      echo "[$(date -Is)] $svc is not active — skipping"
+    fi
+  done
+
+  echo "==== $(date -Is) Soft restart finished ===="
+}
+
 # --- main ---
 require_root
 
@@ -282,8 +305,9 @@ ensure_venv_and_deps
 read_and_export_env
 write_env_file
 ensure_postgres_role_and_db
-# run_migrations
+run_migrations
 
 create_creds_file
 install_units "$UNIT_SRC_DIR"
 enable_and_start
+restart_services
