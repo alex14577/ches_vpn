@@ -58,31 +58,6 @@ class User(SQLModel, table=True):
     )
 
 
-class Task(SQLModel, table=True):
-    __tablename__ = "tasks"
-    __table_args__ = (UniqueConstraint("idempotency_key", name="uq_tasks_idem"),)
-
-    id: uuid.UUID = Field(
-        default_factory=uuid.uuid4,
-        sa_column=Column(PG_UUID(as_uuid=True), primary_key=True),
-    )
-
-    type: str = Field(sa_column=Column(String(32), nullable=False))
-    status: str = Field(sa_column=Column(String(16), nullable=False))
-
-    payload: dict = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False))
-    idempotency_key: str = Field(sa_column=Column(String(128), nullable=False))
-
-    last_error: Optional[str] = Field(default=None, sa_column=Column(Text))
-
-    created_at: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    )
-    updated_at: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
-    )
-
-
 class Plan(SQLModel, table=True):
     __tablename__ = "plans"
 

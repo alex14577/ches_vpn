@@ -7,10 +7,10 @@ SERVICE_USER="alex"
 SERVICE_GROUP="alex"
 ENV_FILE="$TARGET_DIR/.env.systemd"
 UNIT_DST_DIR="/etc/systemd/system"
+ADMIN_CREDENTIALS_FILE="/var/lib/ches_vpn"
 
 SERVICES=(
   vpn-bot.service
-  vpn-worker.service
   vpn-subscription.service
 )
 
@@ -245,6 +245,12 @@ install_units() {
   systemctl daemon-reload
 }
 
+create_creds_file() {
+  touch "$ADMIN_CREDENTIALS_FILE"
+  chown "$SERVICE_USER":"$SERVICE_GROUP" "$ADMIN_CREDENTIALS_FILE"
+  chmod 700 "$ADMIN_CREDENTIALS_FILE"
+}
+
 enable_and_start() {
   echo "Enabling and starting services"
   for service in "${SERVICES[@]}"; do
@@ -276,7 +282,8 @@ ensure_venv_and_deps
 read_and_export_env
 write_env_file
 ensure_postgres_role_and_db
-run_migrations
+# run_migrations
 
+create_creds_file
 install_units "$UNIT_SRC_DIR"
 enable_and_start

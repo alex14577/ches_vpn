@@ -24,7 +24,3 @@ def set_session_cookie(resp: Response) -> None:
 
 def clear_session_cookie(resp: Response) -> None:
     resp.delete_cookie(COOKIE_NAME, path="/admin")
-
-def require_admin(request: Request) -> None:
-    if not request.cookies.get(COOKIE_NAME):
-        raise HTTPException(status_code=401, detail="Not authenticated")

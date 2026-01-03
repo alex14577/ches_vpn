@@ -1,0 +1,108 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# =========================
+# Virtual environments
+# =========================
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# =========================
+# Packaging / build
+# =========================
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# =========================
+# Pytest / coverage
+# =========================
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+nosetests.xml
+coverage.xml
+
+# =========================
+# Mypy / type checking
+# =========================
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# =========================
+# Ruff / pylint
+# =========================
+.ruff_cache/
+.pylint.d/
+
+# =========================
+# Logs
+# =========================
+*.log
+logs/
+
+# =========================
+# Databases / local state
+# =========================
+*.sqlite
+*.sqlite3
+*.db
+
+# =========================
+# Environment variables
+# =========================
+.env
+.env.*
+!.env.example
+
+# =========================
+# IDEs
+# =========================
+.vscode/
+.idea/
+*.iml
+
+# =========================
+# OS
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Async / temp files
+# =========================
+*.tmp
+*.swp
+*.swo
+
+# =========================
+# Jupyter (если вдруг)
+# =========================
+.ipynb_checkpoints/
+
+# =========================
+# Alembic (если появится)
+# =========================
+alembic/versions/*.pyc
+
+
+**/.venv/
+**/__pycache__/
+
+*.pem
+*.key
+*.crt
+secrets/
+
+answers/

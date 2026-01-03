@@ -2,7 +2,7 @@ import asyncio
 from sqlmodel import SQLModel
 
 from common.db import engine
-from common.models import User, Task  # важно: импортировать модели, чтобы они зарегистрировались
+from common.models import User  # важно: импортировать модели, чтобы они зарегистрировались
 
 
 async def main() -> None:

@@ -9,6 +9,7 @@ User=alex
 Group=alex
 WorkingDirectory=/opt/vpn
 
+Environment=ADMIN_CREDENTIALS_FILE=/opt/vpn/.env.admin
 EnvironmentFile=/opt/vpn/.env.systemd
 
 ExecStart=/opt/vpn/.venv/bin/uvicorn subscription_service.main:app \
