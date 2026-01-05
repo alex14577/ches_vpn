@@ -65,19 +65,29 @@ async def servers_delete(
     return RedirectResponse(url="/admin/servers", status_code=303)
 
 @router.post("/servers/{server_id}/sync")
-async def servers_delete(
-    request: Request,
-    server_id: uuid.UUID
-):
+async def servers_sync(request: Request, server_id: uuid.UUID):
     Logger.info("/servers/%s/sync", server_id)
+
     users: list[User] = await db_call(lambda db: db.users.all())
-    
-    try:
-        serverManager: Manager = request.app.state.serverManager
-        for user in users:
-            await serverManager.sync_server(user=user, server_id=server_id)
-    except Exception as e:
-        Logger.error("/admin/servers/%s/sync: %s", server_id, str(e))
-        return RedirectResponse(f"/admin/servers/sync?err={str(e)}", status_code=303)
-    
+
+    server_manager: Manager = request.app.state.serverManager
+
+    ok = 0
+    failed: list[str] = []
+
+    for user in users:
+        try:
+            await server_manager.sync_server(user=user, server_id=server_id)
+            ok += 1
+        except Exception as e:
+            # лучше с traceback
+            Logger.exception("sync failed: server=%s user_id=%s tg=%s username=%r",
+                             server_id, user.id, user.tg_user_id, user.username)
+            failed.append(str(user.tg_user_id))
+
+    if failed:
+        # можно ограничить длину, чтобы URL не раздувать
+        err = f"failed={len(failed)}/{len(users)}"
+        return RedirectResponse(f"/admin/servers/sync?err={err}", status_code=303)
+
     return RedirectResponse(url="/admin/servers", status_code=303)
