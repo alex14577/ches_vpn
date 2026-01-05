@@ -222,7 +222,6 @@ class Manager:
     # ---- public API ----
 
     async def sync_server(self, user: User, server_id: uuid.UUID) -> None:
-        """Убедиться, что пользователь добавлен на конкретный сервер (во все inbound’ы)."""
         await self._ensure_synced()
 
         user_id = str(user.id)
@@ -234,16 +233,18 @@ class Manager:
         async with self._io_sem:
             inbounds = await client.inbounds()
 
-            for inbound in inbounds:
-                # уже есть -> пропускаем
-                if any(c.id == user_id for c in inbound.settings.clients):
-                    Logger.debug("user %s already in server", user.username or user.tg_user_id)
-                    continue
+            missing = [ib for ib in inbounds if not any(c.id == user_id for c in ib.settings.clients)]
 
+            if not missing:
+                Logger.debug('User "%s" already present on server "%s"', display_name, client.cfg.api_base_url)
+                return
+
+            for inbound in missing:
                 email = f"{display_name}-{inbound.id}"
                 await client.addClient(inbound.id, user_id, email)
 
-                Logger.info('User "%s" synced on server "%s"', display_name, client.cfg.api_base_url)
+            Logger.info('User "%s" synced on server "%s" (%d inbound(s) updated)',
+                        display_name, client.cfg.api_base_url, len(missing))
 
     async def sync_user(self, user: User) -> None:
         """Добавить пользователя на все сервера."""
