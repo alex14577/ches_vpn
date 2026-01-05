@@ -269,7 +269,7 @@ run_migrations() {
     set -e
     cd '$TARGET_DIR'
     . .venv/bin/activate
-    TG_BOT_TOKEN='$TG_BOT_TOKEN' DATABASE_URL='$DATABASE_URL' PUBLIC_BASE_URL='$PUBLIC_BASE_URL' \
+    DATABASE_URL='$DATABASE_URL' \
       python migrate.py
   "
 }
