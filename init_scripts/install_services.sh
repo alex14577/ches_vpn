@@ -141,6 +141,7 @@ read_and_export_env() {
   read -rsp "Postgres password: " DB_PASSWORD
   echo
   read -rp "Postgres DB name: " DB_NAME
+  read -rp "Postgres DB name: " DB_NAME
 
   export TG_BOT_TOKEN
   export DB_USER

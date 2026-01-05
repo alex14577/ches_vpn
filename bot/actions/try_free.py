@@ -6,7 +6,7 @@ from common.models import Plan, Subscription, User
 from common.logger import Logger
 from common.xui_client.registry import Manager
 
-PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "").strip()
+PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "http://ches-server.mooo.com:33333").strip()
 
 # бесплатный тариф
 async def try_free(tg_user_id, username, serversManager: Manager):
