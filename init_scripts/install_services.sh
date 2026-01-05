@@ -358,6 +358,6 @@ ensure_postgres_role_and_db
 run_migrations
 
 create_creds_file
-install_units "$UNC_DIR"
+install_units "$UNIT_SRC_DIR"
 enable_and_start
 restart_services
