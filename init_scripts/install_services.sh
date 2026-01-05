@@ -145,6 +145,11 @@ read_and_export_env() {
   export DB_USER
   export DB_PASSWORD
   export DB_NAME
+  
+  : "${DB_HOST:=127.0.0.1}"
+  : "${DB_PORT:=5432}"
+  export DB_HOST DB_PORT
+  export DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
 }
 
 
@@ -163,6 +168,9 @@ TG_BOT_TOKEN=$TG_BOT_TOKEN
 DB_USER=$DB_USER
 DB_PASSWORD=$DB_PASSWORD
 DB_NAME=$DB_NAME
+DB_HOST=$DB_HOST
+DB_PORT=$DB_PORT
+DATABASE_URL=$DATABASE_URL
 EOF
 
   chown "$SERVICE_USER:$SERVICE_GROUP" "$ENV_FILE"
@@ -261,7 +269,7 @@ run_migrations() {
     set -e
     cd '$TARGET_DIR'
     . .venv/bin/activate
-    BOT_TOKEN='$BOT_TOKEN' DATABASE_URL='$DATABASE_URL' PUBLIC_BASE_URL='$PUBLIC_BASE_URL' \
+    TG_BOT_TOKEN='$TG_BOT_TOKEN' DATABASE_URL='$DATABASE_URL' PUBLIC_BASE_URL='$PUBLIC_BASE_URL' \
       python migrate.py
   "
 }
