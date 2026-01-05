@@ -24,10 +24,10 @@ from bot.utils import parse_ref_payload
 from bot.actions.handler import handler
 from bot.actions import main_menu
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "").strip()
+TG_BOT_TOKEN = os.environ.get("TG_BOT_TOKEN", "").strip()
 ADMIN_TG_ID = 572200030
-if not BOT_TOKEN:
-    raise RuntimeError("BOT_TOKEN is empty. Export BOT_TOKEN env var.")
+if not TG_BOT_TOKEN:
+    raise RuntimeError("TG_BOT_TOKEN is empty. Export TG_BOT_TOKEN env var.")
 
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -71,7 +71,7 @@ def build_app() -> Application:
     Logger.configure("bot", level=Level.DEBUG)
     Logger.silence("telegram", "telegram.ext", "httpx", "httpcore.http11", "httpcore.connection", level=Level.WARNING)
 
-    app = Application.builder().token(BOT_TOKEN).build()
+    app = Application.builder().token(TG_BOT_TOKEN).build()
     app.bot_data["servers_manager"] = Manager()
 
     async def _post_init(application: Application) -> None:
