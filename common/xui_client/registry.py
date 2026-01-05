@@ -237,6 +237,7 @@ class Manager:
             for inbound in inbounds:
                 # уже есть -> пропускаем
                 if any(c.id == user_id for c in inbound.settings.clients):
+                    Logger.debug("user %s already in server", user.username or user.tg_user_id)
                     continue
 
                 email = f"{display_name}-{inbound.id}"
