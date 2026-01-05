@@ -76,8 +76,8 @@ async def servers_delete(
         serverManager: Manager = request.app.state.serverManager
         for user in users:
             await serverManager.sync_server(user=user, server_id=server_id)
-    except Exception:
-        Logger.error("/admin/servers/%s/sync: Не удалось синронизировать сервера из бд", server_id)
-        return RedirectResponse("/admin/servers/delete?err=Не удалось синронизировать сервера из бд", status_code=303)
+    except Exception as e:
+        Logger.error("/admin/servers/%s/sync: %s", server_id, str(e))
+        return RedirectResponse(f"/admin/servers/sync?err={str(e)}", status_code=303)
     
     return RedirectResponse(url="/admin/servers", status_code=303)
