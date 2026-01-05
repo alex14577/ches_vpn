@@ -116,29 +116,59 @@ ensure_venv_and_deps() {
   "
 }
 
-read_and_export_env() {
-  echo
-
-  BOT_TOKEN="$(prompt_secret BOT_TOKEN | tr -d '\r\n')"
-  DATABASE_URL="$(prompt_secret DATABASE_URL | tr -d '\r\n')"
-  PUBLIC_BASE_URL="$(prompt_value PUBLIC_BASE_URL | tr -d '\r\n')"
-
-  # ✅ критично: экспортируем, чтобы видел Python/psql, запускаемые из этого скрипта
-  export BOT_TOKEN DATABASE_URL PUBLIC_BASE_URL
+load_env_if_exists() {
+  if [[ -f "$ENV_FILE" ]]; then
+    echo "[INFO] Found existing env file: $ENV_FILE"
+    set -a
+    source "$ENV_FILE"
+    set +a
+    return 0
+  fi
+  return 1
 }
+
+read_and_export_env() {
+  if load_env_if_exists; then
+    echo "[INFO] Using credentials from $ENV_FILE"
+    return
+  fi
+
+  echo "[INFO] Env file not found, asking for credentials"
+
+  read -rp "Telegram bot token: " TG_BOT_TOKEN
+  read -rp "Postgres user: " DB_USER
+  read -rsp "Postgres password: " DB_PASSWORD
+  echo
+  read -rp "Postgres DB name: " DB_NAME
+
+  export TG_BOT_TOKEN
+  export DB_USER
+  export DB_PASSWORD
+  export DB_NAME
+}
+
 
 write_env_file() {
-  echo "Writing env file: $ENV_FILE"
-  umask 077
-  cat > "$ENV_FILE" <<EOF
-BOT_TOKEN=${BOT_TOKEN}
-DATABASE_URL=${DATABASE_URL}
-PUBLIC_BASE_URL=${PUBLIC_BASE_URL}
+  if [[ -f "$ENV_FILE" ]]; then
+    echo "[INFO] Env file already exists, skipping write"
+    return
+  fi
+
+  echo "[INFO] Writing env file to $ENV_FILE"
+
+  install -d -m 700 "$TARGET_DIR"
+
+  cat >"$ENV_FILE" <<EOF
+TG_BOT_TOKEN=$TG_BOT_TOKEN
+DB_USER=$DB_USER
+DB_PASSWORD=$DB_PASSWORD
+DB_NAME=$DB_NAME
 EOF
 
-  chown "${SERVICE_USER}:${SERVICE_GROUP}" "$ENV_FILE"
-  chmod 0600 "$ENV_FILE"
+  chown "$SERVICE_USER:$SERVICE_GROUP" "$ENV_FILE"
+  chmod 600 "$ENV_FILE"
 }
+
 
 ensure_postgres_role_and_db() {
   echo "Ensuring PostgreSQL role and database from DATABASE_URL"
