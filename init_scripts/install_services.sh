@@ -171,6 +171,17 @@ EOF
 
 
 ensure_postgres_role_and_db() {
+  if [[ -z "${DATABASE_URL:-}" ]]; then
+    if [[ -n "${DB_USER:-}" && -n "${DB_NAME:-}" ]]; then
+      : "${DB_HOST:=127.0.0.1}"
+      : "${DB_PORT:=5432}"
+      export DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+      echo "[INFO] DATABASE_URL was empty; constructed it from DB_* variables"
+    else
+      echo "ERROR: DATABASE_URL is empty"
+      exit 1
+    fi
+  fi
   echo "Ensuring PostgreSQL role and database from DATABASE_URL"
 
   # Парсим URL надёжно через Python (читает DATABASE_URL из env)
