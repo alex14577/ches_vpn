@@ -149,7 +149,7 @@ read_and_export_env() {
   : "${DB_HOST:=127.0.0.1}"
   : "${DB_PORT:=5432}"
   export DB_HOST DB_PORT
-  export DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+  export DATABASE_URL="postgresql+psycopg://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
 }
 
 
@@ -183,7 +183,7 @@ ensure_postgres_role_and_db() {
     if [[ -n "${DB_USER:-}" && -n "${DB_NAME:-}" ]]; then
       : "${DB_HOST:=127.0.0.1}"
       : "${DB_PORT:=5432}"
-      export DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+      export DATABASE_URL="postgresql+psycopg://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
       echo "[INFO] DATABASE_URL was empty; constructed it from DB_* variables"
     else
       echo "ERROR: DATABASE_URL is empty"
