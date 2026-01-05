@@ -37,6 +37,11 @@
             <button type="submit">Delete</button>
           </form>
         </td>
+        <td>
+          <form method="post" action="/admin/servers/{{ s.id }}/sync" onsubmit="return confirm('Sync server?');">
+            <button type="submit">Sync</button>
+          </form>
+        </td>
       </tr>
       {% endfor %}
     </tbody>

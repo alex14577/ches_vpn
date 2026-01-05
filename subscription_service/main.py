@@ -25,6 +25,7 @@ app.mount("/admin/static", StaticFiles(directory="subscription_service/admin/sta
 
 serverManager = Manager()
 Logger.configure("subscription_service", level=Level.DEBUG)
+Logger.silence("httpcore.http11", "httpcore.connection", "httpx", "python_multipart.multipart", level=Level.WARNING)
 
 
 def plainText(body: str, *, statusCode: int = 200) -> Response:

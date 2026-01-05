@@ -4,8 +4,9 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from common.db import db_call
-from common.models import VpnServer
+from common.models import VpnServer, User
 from common.xui_client.registry import Manager
+from common.logger import Logger
 
 router = APIRouter()
 templates = Jinja2Templates(directory="subscription_service/admin/templates")
@@ -39,10 +40,10 @@ async def servers_create(
         serverManager: Manager = request.app.state.serverManager
         await serverManager.syncServers()
     except Exception:
-        return RedirectResponse("/admin/users?err=Не удалось синронизировать сервера из бд", status_code=303)
+        return RedirectResponse("/admin/servers?err=Не удалось синронизировать сервера из бд", status_code=303)
 
     for user in users:
-        await serverManager.syncUser(user)
+        await serverManager.sync_user(user)
 
     return RedirectResponse(url="/admin/servers", status_code=303)
 
@@ -51,12 +52,32 @@ async def servers_delete(
     request: Request,
     server_id: uuid.UUID
 ):
+    Logger.info("/servers/%s/delete", server_id)
     await db_call(lambda db: db.servers.delete(server_id))
     
     try:
         serverManager: Manager = request.app.state.serverManager
         await serverManager.syncServers()
     except Exception:
-        return RedirectResponse("/admin/users?err=Не удалось синронизировать сервера из бд", status_code=303)
+        Logger.error("/admin/servers/%s/delete: Не удалось удалить сервер", server_id)
+        return RedirectResponse("/admin/servers/delete?err=Не удалось удалить сервер", status_code=303)
+    
+    return RedirectResponse(url="/admin/servers", status_code=303)
+
+@router.post("/servers/{server_id}/sync")
+async def servers_delete(
+    request: Request,
+    server_id: uuid.UUID
+):
+    Logger.info("/servers/%s/sync", server_id)
+    users: list[User] = await db_call(lambda db: db.users.all())
+    
+    try:
+        serverManager: Manager = request.app.state.serverManager
+        for user in users:
+            await serverManager.sync_server(user=user, server_id=server_id)
+    except Exception:
+        Logger.error("/admin/servers/%s/sync: Не удалось синронизировать сервера из бд", server_id)
+        return RedirectResponse("/admin/servers/delete?err=Не удалось синронизировать сервера из бд", status_code=303)
     
     return RedirectResponse(url="/admin/servers", status_code=303)

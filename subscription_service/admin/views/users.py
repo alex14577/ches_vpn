@@ -55,7 +55,7 @@ async def user_create(
     async def _create(db):
         # If user with this tg_user_id already exists: update basic fields.
         res = await db._s.execute(select(User).where(User.tg_user_id == int(tg_user_id)))
-        user = res.scalar_one_or_none()
+        user: User = res.scalar_one_or_none()
 
         if user is None:
             user = User(tg_user_id=int(tg_user_id), username=username, refer_id=refer_id)
@@ -71,7 +71,7 @@ async def user_create(
     user = await db_call(_create)
     
     serverManager: Manager = request.app.state.serverManager
-    await   serverManager.syncUser(user)
+    await   serverManager.sync_user(user)
     return RedirectResponse(url=f"/admin/users/{user.id}", status_code=303)
 
 
@@ -110,7 +110,7 @@ async def user_update(
     # На серверах не меняем !!!!                   <=================================
     # try:
     #     serverManager: Manager = request.app.state.serverManager
-    #     await serverManager.syncUser(user)
+    #     await serverManager.sync_user(user)
     # except Exception:
     #     return RedirectResponse("/admin/users?err=Не удалось обновить пользователя на VPN-серверах", status_code=303)
     # На серверах не меняем !!!!                   <=================================
@@ -127,7 +127,7 @@ async def user_delete(request: Request, user_id: uuid.UUID):
     serverManager: Manager = request.app.state.serverManager
 
     try:
-        await serverManager.delUser(user)
+        await serverManager.del_user(user)
     except Exception:
         return RedirectResponse("/admin/users?err=Не удалось удалить пользователя на VPN-серверах", status_code=303)
 

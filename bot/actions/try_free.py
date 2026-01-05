@@ -24,7 +24,7 @@ async def try_free(tg_user_id, username, serversManager: Manager):
                                                                           valid_until=None))
         
     try:
-        await serversManager.syncUser(user)
+        await serversManager.sync_user(user)
     except Exception as e:
         Logger.error("Failed to sync user in \"try_free\". Error %s", str(e))
 
