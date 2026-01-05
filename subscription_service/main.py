@@ -48,7 +48,7 @@ async def getSubscription(token: str) -> Response:
         name = user.username or str(user.tg_user_id)
         Logger.debug('request "/sub/%s": user="%s"', token, name)
 
-        configs = await serverManager.collectConfigs(str(user.id))
+        configs = await serverManager.collect_configs(str(user.id))
         Logger.debug('user "%s" got %d configs', name, len(configs))
 
         body = "\n".join(configs) + ("\n" if configs else "")
