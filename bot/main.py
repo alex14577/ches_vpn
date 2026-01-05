@@ -51,11 +51,9 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     Logger.info("User start: tg_user_id=%s username=%s", tg_user.id, tg_user.username)
     
     await update.message.reply_text(
-        "👋 Добро пожаловать в Ches VPN\n\n"
-        "В данный момент проект только начинает развиваться, поэтому предоставляем бесплатный ддоступ за рекомендации друзьям и знакомым.\n\n"
-        "Нажмите \"Получить бесплатно\", чтобы получить ссылку, а  инструкции Вы найдёте всю нужную информацию, как установить приложения на все устройства\n\n"
-        "Выбери действие ниже 👇",
-        reply_markup=main_menu.show(),
+        text=main_menu.text(),
+        reply_markup=main_menu.keyboard(),
+        parse_mode="HTML",
     )
 
 async def cmd_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
