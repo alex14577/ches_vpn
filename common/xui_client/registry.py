@@ -243,7 +243,7 @@ class Manager:
                 email = f"{display_name}-{inbound.id}"
                 await client.addClient(inbound.id, user_id, email)
 
-            Logger.info('User "%s" synced on server "%s"', display_name, client.cfg.api_base_url)
+                Logger.info('User "%s" synced on server "%s"', display_name, client.cfg.api_base_url)
 
     async def sync_user(self, user: User) -> None:
         """Добавить пользователя на все сервера."""

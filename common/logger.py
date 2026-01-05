@@ -22,7 +22,7 @@ class Logger:
 
         logging.basicConfig(
             level=int(level),
-            format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+            format="%(levelname)s %(name)s: %(message)s",
         )
         cls._logger = logging.getLogger(name)
 
