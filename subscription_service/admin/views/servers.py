@@ -38,7 +38,7 @@ async def servers_create(
 
     try:
         serverManager: Manager = request.app.state.serverManager
-        await serverManager.syncServers()
+        await serverManager.sync_servers_now()
     except Exception:
         return RedirectResponse("/admin/servers?err=Не удалось синронизировать сервера из бд", status_code=303)
 
@@ -57,7 +57,7 @@ async def servers_delete(
     
     try:
         serverManager: Manager = request.app.state.serverManager
-        await serverManager.syncServers()
+        await serverManager.sync_servers_now()
     except Exception:
         Logger.error("/admin/servers/%s/delete: Не удалось удалить сервер", server_id)
         return RedirectResponse("/admin/servers/delete?err=Не удалось удалить сервер", status_code=303)
@@ -77,7 +77,7 @@ async def servers_sync(request: Request, server_id: uuid.UUID):
 
     for user in users:
         try:
-            await server_manager.sync_server(user=user, server_id=server_id)
+            await server_manager.sync_server(user=user, server_id=server_id, force=True)
             ok += 1
         except Exception as e:
             # лучше с traceback
