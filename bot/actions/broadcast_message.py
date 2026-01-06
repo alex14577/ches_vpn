@@ -37,7 +37,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     context.user_data.pop("awaiting_broadcast", None)
 
-    users = await db.db_call(lambda db: db.users.all)
+    users = await db.db_call(lambda db: db.users.all())
     user_ids: list[int] = [u.tg_user_id for u in users]
     ok = 0
     fail = 0
