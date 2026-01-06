@@ -29,6 +29,7 @@ ProtectKernelModules=true
 ProtectControlGroups=true
 LockPersonality=true
 MemoryDenyWriteExecute=true
+ReadWritePaths=/var/lib/ches_vpn
 UMask=0077
 
 [Install]
