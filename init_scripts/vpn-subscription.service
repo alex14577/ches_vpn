@@ -13,7 +13,7 @@ Environment=ADMIN_CREDENTIALS_FILE=/var/lib/ches_vpn/admin.env
 EnvironmentFile=/opt/vpn/.env.systemd
 
 ExecStart=/opt/vpn/.venv/bin/uvicorn subscription_service.main:app \
-  --host 0.0.0.0 
+  --host 0.0.0.0 --port 443 \
   --ssl-certfile /etc/letsencrypt/live/ches-server.mooo.com/fullchain.pem \
   --ssl-keyfile  /etc/letsencrypt/live/ches-server.mooo.com/privkey.pem
 
