@@ -1,5 +1,7 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
+from bot.actions import settings
+
 def text() -> str:
     return (
         "👋 <b>Добро пожаловать в Ches VPN!</b>\n\n"
@@ -11,11 +13,15 @@ def text() -> str:
         "Выберите действие ниже 👇"
     )
 
-def keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        [
+def keyboard(tg_user_id) -> InlineKeyboardMarkup:
+    rows = [
             [InlineKeyboardButton(  "📦 Попробовать бесплатно", callback_data="try_free")],
             [InlineKeyboardButton(             "📖 Инструкция", callback_data="instruction")],
             [InlineKeyboardButton("🙏 Поблагодарить создателя", callback_data="say_thanks")],
         ]
-    )
+    if tg_user_id in settings.ADMIN_TG_ID:
+        rows.append(
+            [InlineKeyboardButton("📣 Сделать рассылку", callback_data="admin_broadcast")]
+        )
+    return InlineKeyboardMarkup(rows)
+

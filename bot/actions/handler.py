@@ -8,19 +8,21 @@ from telegram.ext import (
 )
 
 from bot.helpers import helpers
+from bot.actions import settings 
 from bot.actions import try_free, main_menu, instructions, say_thanks, return_main_menu
 from common.xui_client.registry import Manager
+from common.logger import Logger
 
 from telegram.constants import ParseMode
 
 HTML = ParseMode.HTML
 
 
-async def _render_main_menu(query: CallbackQuery) -> None:
+async def _render_main_menu(query: CallbackQuery, tg_user_id) -> None:
     await helpers.safe_edit(
         query,
         text=main_menu.text(),
-        reply_markup=main_menu.keyboard(),
+        reply_markup=main_menu.keyboard(tg_user_id),
         parse_mode=HTML,
     )
 
@@ -77,9 +79,29 @@ async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             return
 
         case "back_to_main":
-            await _render_main_menu(query)
+            await _render_main_menu(query, tg_user_id)
+            return
+        
+        case "admin_broadcast":
+            if tg_user_id not in settings.ADMIN_TG_ID:
+                Logger.error("User \"%s\" tried to get admin rights", username or tg_user_id)
+                return
+
+            context.user_data["awaiting_broadcast"] = True
+
+            await helpers.safe_edit(
+                query,
+                text=(
+                    "📣 <b>Рассылка</b>\n\n"
+                    "Отправь текст сообщения, которое нужно разослать.\n"
+                    "Или напиши /cancel для отмены."
+                ),
+                reply_markup=return_main_menu.keyboard(),
+                parse_mode=HTML,
+            )
             return
 
+
         case _:
-            await _render_main_menu(query)
+            await _render_main_menu(query, tg_user_id)
             return

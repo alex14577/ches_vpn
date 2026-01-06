@@ -1,6 +1,6 @@
 from __future__ import annotations
+from bot.actions.settings import SBP_PHONE
 
-SBP_PHONE = "+7-967-552-5410"
 
 
 def text() -> str:

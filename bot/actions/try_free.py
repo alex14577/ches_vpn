@@ -1,12 +1,10 @@
 from datetime import datetime, timezone
-import os
 
 from common.db import db_call
 from common.models import Plan, Subscription, User
 from common.logger import Logger
 from common.xui_client.registry import Manager
-
-PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "https://ches-server.mooo.com").strip()
+from bot.actions.settings import PUBLIC_BASE_URL
 
 # бесплатный тариф
 async def try_free(tg_user_id, username, serversManager: Manager):

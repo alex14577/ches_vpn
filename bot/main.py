@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 
 from telegram import (
     BotCommand,
@@ -13,6 +12,8 @@ from telegram.ext import (
     CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
+    MessageHandler,
+    filters
 )
 
 from common.db import db_call
@@ -23,12 +24,8 @@ from common.xui_client.registry import Manager
 from bot.utils import parse_ref_payload
 from bot.actions.handler import handler
 from bot.actions import main_menu
-
-TG_BOT_TOKEN = os.environ.get("TG_BOT_TOKEN", "").strip()
-ADMIN_TG_ID = 572200030
-if not TG_BOT_TOKEN:
-    raise RuntimeError("TG_BOT_TOKEN is empty. Export TG_BOT_TOKEN env var.")
-
+from bot.actions import broadcast_message
+from bot.actions.settings import TG_BOT_TOKEN, ADMIN_TG_ID
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     tg_user_id = update.effective_user.id  
@@ -52,7 +49,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     
     await update.message.reply_text(
         text=main_menu.text(),
-        reply_markup=main_menu.keyboard(),
+        reply_markup=main_menu.keyboard(tg_user_id),
         parse_mode="HTML",
     )
 
@@ -84,6 +81,8 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("menu", cmd_menu))
     app.add_handler(CallbackQueryHandler(handler))
+    app.add_handler(CommandHandler("cancel", broadcast_message.cancel))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, broadcast_message.message_handler))
     return app
 
 
