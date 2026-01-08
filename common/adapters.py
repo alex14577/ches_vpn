@@ -5,7 +5,8 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 import uuid
 
-from sqlalchemy import select, update as sa_update, delete, or_, and_, func
+from sqlalchemy import BigInteger, Column, DateTime, String
+from sqlalchemy import select, update as sa_update, delete, cast, or_, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.models import User, Subscription, Plan, VpnServer
@@ -74,6 +75,51 @@ class UsersAdapter:
 
         res = await self.s.execute(stmt)
         return list(res.scalars().all())
+    
+    async def list_with_source_stats(
+        self,
+        q: Optional[str] = None,
+    ) -> tuple[list[User], list[dict[str, object]]]:
+        """
+        Возвращает:
+          - users: список пользователей (с учётом поиска q), отсортированный по created_at desc
+          - source_stats: агрегат по source для ВСЕХ пользователей (глобально), вида:
+              [{"refer_id": "yndx", "count": 43}, {"refer_id": "—", "count": 8}, ...]
+        """
+        q = (q or "").strip()
+
+        # -------- список пользователей --------
+        stmt = select(User).order_by(User.created_at.desc())
+
+        if q:
+            conds = []
+            if q.isdigit():
+                conds.append(User.tg_user_id == int(q))
+
+            like = f"%{q}%"
+            conds.append(User.username.ilike(like))
+            conds.append(User.refer_id.ilike(like))
+            conds.append(cast(User.subscription_token, String).ilike(like))
+
+            stmt = stmt.where(or_(*conds))
+
+        res = await self.s.execute(stmt)
+        users = list(res.scalars().all())
+
+        # -------- статистика по source --------
+        stats_stmt = (
+            select(User.refer_id, func.count())
+            .group_by(User.refer_id)
+            .order_by(func.count().desc())
+        )
+
+        stats_res = await self.s.execute(stats_stmt)
+        source_stats = [
+            {"refer_id": (src or "—"), "count": cnt}
+            for (src, cnt) in stats_res.all()
+        ]
+
+        return users, source_stats
 
 
 class SubscriptionAdapter:

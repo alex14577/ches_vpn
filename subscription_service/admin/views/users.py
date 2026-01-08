@@ -16,31 +16,17 @@ from common.xui_client.registry import Manager
 router = APIRouter()
 templates = Jinja2Templates(directory="subscription_service/admin/templates")
 
-
 @router.get("/users", response_class=HTMLResponse)
 async def users_page(request: Request, q: Optional[str] = None) -> HTMLResponse:
-    q = (q or "").strip()
+    users, source_stats = await db_call(lambda db:  db.users.list_with_source_stats(q=q))
 
-    async def _load(db):
-        stmt = select(User).order_by(User.created_at.desc())
-        if q:
-            conds = []
-            if q.isdigit():
-                conds.append(User.tg_user_id == int(q))
-
-            like = f"%{q}%"
-            conds.append(User.username.ilike(like))
-            conds.append(User.refer_id.ilike(like))
-            conds.append(cast(User.subscription_token, String).ilike(like))
-
-            stmt = stmt.where(or_(*conds))
-
-        res = await db._s.execute(stmt)
-        return list(res.scalars().all())
-
-    users = await db_call(_load)
-    return templates.TemplateResponse("users.html", {"request": request, "users": users, "q": q})
-
+    return templates.TemplateResponse(
+        "users.html",
+        {"request": request, 
+         "users": users, 
+         "q": (q or "").strip(), 
+         "source_stats": source_stats},
+    )
 
 @router.post("/users/create")
 async def user_create(
@@ -105,7 +91,7 @@ async def user_update(
 
     user.refer_id = refer_id
     user.username = username
-    user = db_call(lambda db: db.users.update(user=user))
+    user = await db_call(lambda db: db.users.update(user=user))
         
     # На серверах не меняем !!!!                   <=================================
     # try:

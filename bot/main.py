@@ -17,11 +17,9 @@ from telegram.ext import (
 )
 
 from common.db import db_call
-from common.adapters import DbAdapters
 from bot.reports import daily_report_task
 from common.logger import Logger, Level
 from common.xui_client.registry import Manager
-from bot.utils import parse_ref_payload
 from bot.actions.handler import handler
 from bot.actions import main_menu
 from bot.actions import broadcast_message
@@ -30,21 +28,12 @@ from bot.actions.settings import TG_BOT_TOKEN, ADMIN_TG_ID
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     tg_user_id = update.effective_user.id  
     tg_user = update.effective_user
+    source = context.args[0] if context.args else None
+
     if not tg_user or not update.message:
         return
 
-    args = context.args
-    payload = args[0] if args else None
-
-    referrer_tg_id = parse_ref_payload(payload) if payload else None
-
-    if referrer_tg_id == tg_user_id:
-        referrer_tg_id = None
-
-    async def work(db: DbAdapters):
-        return await db.users.getOrCreate(tg_user.id, tg_user.username, refer_id=referrer_tg_id)
-
-    await db_call(work)
+    await db_call(lambda db: db.users.getOrCreate(tg_user.id, tg_user.username, refer_id=source))
     Logger.info("User start: tg_user_id=%s username=%s", tg_user.id, tg_user.username)
     
     await update.message.reply_text(
@@ -55,8 +44,6 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def cmd_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await cmd_start(update, context)
-
-
 
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     Logger.exception("Unhandled error: %s", context.error)

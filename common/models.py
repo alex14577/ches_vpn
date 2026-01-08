@@ -30,19 +30,28 @@ class User(SQLModel, table=True):
     tg_user_id: int = Field(
         sa_column=Column(BigInteger, unique=True, nullable=False, index=True)
     )
-    refer_id: Optional[str] = Field(default=None, sa_column=Column(String(128)))
+
+    # NEW: "yndx" или token пригласившего пользователя (first-touch)
+    refer_id: Optional[str] = Field(
+        default=None,
+        sa_column=Column(String(128), index=True),
+    )
 
     username: Optional[str] = Field(default=None, sa_column=Column(String(64)))
 
     subscription_token: str = Field(
-        sa_column=Column(UUID(as_uuid=False), server_default=func.gen_random_uuid())        )
+        sa_column=Column(UUID(as_uuid=False), server_default=func.gen_random_uuid()))
 
     created_at: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+        sa_column=Column(DateTime(timezone=True), 
+                         server_default=func.now(), 
+                         nullable=False)
     )
     updated_at: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
-    )
+        sa_column=Column(DateTime(timezone=True), 
+                         server_default=func.now(), 
+                         onupdate=func.now(), 
+                         nullable=False))
 
     subscriptions: list["Subscription"] = Relationship(
         back_populates="user",
@@ -50,11 +59,6 @@ class User(SQLModel, table=True):
             "cascade": "all, delete-orphan",
             "lazy": "selectin",
         },
-    )
-
-    vpn_binding: Optional["VpnBinding"] = Relationship(
-        back_populates="user",
-        sa_relationship_kwargs={"uselist": False, "lazy": "selectin"},
     )
 
 
@@ -159,56 +163,3 @@ class VpnServer(SQLModel, table=True):
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
     )
 
-    bindings: list["VpnBinding"] = Relationship(
-        back_populates="server",
-        sa_relationship_kwargs={"lazy": "selectin"},
-    )
-
-class VpnBinding(SQLModel, table=True):
-    __tablename__ = "vpn_bindings"
-    __table_args__ = (
-        UniqueConstraint("user_id", name="uq_vpn_bindings_user"),
-        UniqueConstraint("client_uuid", name="uq_vpn_bindings_client_uuid"),
-    )
-
-    id: uuid.UUID = Field(
-        default_factory=uuid.uuid4,
-        sa_column=Column(PG_UUID(as_uuid=True), primary_key=True),
-    )
-
-    user_id: uuid.UUID = Field(
-        sa_column=Column(
-            PG_UUID(as_uuid=True),
-            ForeignKey("users.id", ondelete="CASCADE"),
-            nullable=False,
-            index=True,
-        )
-    )
-
-    server_id: uuid.UUID = Field(
-        sa_column=Column(
-            PG_UUID(as_uuid=True),
-            ForeignKey("vpn_servers.id", ondelete="RESTRICT"),
-            nullable=False,
-            index=True,
-        )
-    )
-
-    inbound_id: int = Field(sa_column=Column(Integer, nullable=False))
-    client_uuid: uuid.UUID = Field(sa_column=Column(PG_UUID(as_uuid=True), nullable=False))
-
-    created_at: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    )
-    updated_at: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
-    )
-
-    user: "User" = Relationship(
-        back_populates="vpn_binding",
-        sa_relationship_kwargs={"lazy": "selectin"},
-    )
-    server: "VpnServer" = Relationship(
-        back_populates="bindings",
-        sa_relationship_kwargs={"lazy": "selectin"},
-    )

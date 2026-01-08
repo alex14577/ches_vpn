@@ -21,6 +21,32 @@
 </section>
 
 <section class="card">
+  <h2>Источники пользователей</h2>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Refer ID</th>
+          <th>Количество</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in source_stats %}
+        <tr>
+          <td>{{ s.refer_id }}</td>
+          <td>{{ s.count }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="2" class="muted">Нет данных</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card">
   <form method="get" action="/admin/users" class="grid">
     <label>Search
       <input name="q" value="{{ q or '' }}" placeholder="tg id / username / token" />
@@ -50,13 +76,15 @@
           <td>{{ u.tg_user_id }}</td>
           <td>{{ u.username or '—' }}</td>
           <td>{{ u.refer_id or '—' }}</td>
-          <td style="max-width: 280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ u.subscription_token }}</td>
+          <td style="max-width: 280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+            {{ u.subscription_token }}
+          </td>
           <td>{{ u.created_at }}</td>
           <td><a href="/admin/users/{{ u.id }}">Edit</a></td>
         </tr>
         {% else %}
         <tr>
-          <td colspan="6" class="muted">Пользователей пока нет</td>
+          <td colspan="7" class="muted">Пользователей пока нет</td>
         </tr>
         {% endfor %}
       </tbody>
