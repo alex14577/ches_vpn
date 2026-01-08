@@ -34,7 +34,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     await db_call(lambda db: db.users.getOrCreate(tg_user.id, tg_user.username, refer_id=source))
-    Logger.info("User start: tg_user_id=%s username=%s", tg_user.id, tg_user.username)
+    Logger.info("User start: tg_user_id=%s username=%s, source=\"%s\"", tg_user.id, tg_user.username, source or "")
     
     await update.message.reply_text(
         text=main_menu.text(),
