@@ -71,7 +71,7 @@ def build_app() -> Application:
     app.add_handler(CallbackQueryHandler(feedback.callback_handler, pattern="^fb_"))
     app.add_handler(CallbackQueryHandler(handler))
     app.add_handler(CommandHandler("cancel", broadcast_message.cancel))
-    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, feedback.message_handler))
+    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, feedback.message_handler, block=False))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, broadcast_message.message_handler))
     return app
 
