@@ -12,6 +12,7 @@ from bot.actions import settings
 
 ADMIN_REPLY_CALLBACK_PREFIX = "fb_admin_reply:"
 USER_REPLY_CALLBACK = "fb_user_reply"
+PROMPT_PREFIX = "[fb]"
 
 USER_TAG_RE = re.compile(r"\[#u(\d+)\]")
 USER_HEADER_RE = re.compile(r"\[#u(\d+)\](?:\s+@([A-Za-z0-9_]{1,32}))?")
@@ -95,7 +96,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             username = header_match.group(2)
         username_part = f" @{username}" if username else ""
         text = (
-            f"✍️ Ответ пользователю [#u{user_id}]{username_part}.\n"
+            f"{PROMPT_PREFIX} ✍️ Ответ пользователю [#u{user_id}]{username_part}.\n"
             "Напишите сообщение ответом на это сообщение."
         )
         await context.bot.send_message(
@@ -107,7 +108,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     if data == USER_REPLY_CALLBACK:
         text = (
-            "✍️ Ответ поддержке. Напишите сообщение ответом на это сообщение."
+            f"{PROMPT_PREFIX} ✍️ Ответ поддержке. Напишите сообщение ответом на это сообщение."
         )
         await context.bot.send_message(
             chat_id=query.from_user.id,
@@ -206,6 +207,8 @@ async def _handle_admin_reply(
         return
 
     prompt_text = reply_to.text or reply_to.caption or ""
+    if PROMPT_PREFIX not in prompt_text:
+        return
     match = USER_TAG_RE.search(prompt_text)
     if match is None:
         return
