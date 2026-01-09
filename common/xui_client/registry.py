@@ -284,6 +284,41 @@ class Manager:
             if isinstance(r, Exception):
                 Logger.warning("del_user partial failure: %s", r)
 
+    @staticmethod
+    def _client_total_bytes(cs) -> int:
+        total = int(getattr(cs, "up", 0)) + int(getattr(cs, "down", 0))
+        if total <= 0:
+            total = int(getattr(cs, "allTime", 0))
+        return max(0, total)
+
+    async def collect_user_totals(self) -> dict[uuid.UUID, int]:
+        """Собрать суммарный трафик (up+down) по пользователям со всех серверов."""
+        await self._ensure_synced()
+
+        async def collect_one(mc: ManagedClient):
+            async with self._io_sem:
+                return await mc.client.inbounds()
+
+        results = await asyncio.gather(*(collect_one(mc) for mc in self._clients.values()), return_exceptions=True)
+
+        totals: dict[uuid.UUID, int] = {}
+        for r in results:
+            if isinstance(r, Exception):
+                Logger.warning("collect_user_totals partial failure: %s", r)
+                continue
+            for inbound in r:
+                for cs in inbound.clientStats:
+                    try:
+                        user_id = uuid.UUID(str(cs.uuid))
+                    except Exception:
+                        continue
+                    total_bytes = self._client_total_bytes(cs)
+                    if total_bytes <= 0:
+                        continue
+                    totals[user_id] = totals.get(user_id, 0) + total_bytes
+
+        return totals
+
     async def collect_configs(self, user_id: str) -> list[str]:
         """Собрать конфиги (ссылки) по всем серверам для конкретного user_id."""
         await self._ensure_synced()

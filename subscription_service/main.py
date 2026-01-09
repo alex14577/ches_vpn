@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 from contextlib import asynccontextmanager
 
 from typing import Optional
@@ -9,6 +10,7 @@ from common.models import User
 from common.db import db_call
 from common.logger import Logger, Level
 from common.xui_client.registry import Manager
+from subscription_service.stats import daily_stats_task
 
 from subscription_service.admin.router import admin_router
 from fastapi.staticfiles import StaticFiles
@@ -16,7 +18,14 @@ from fastapi.staticfiles import StaticFiles
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.serverManager = Manager()
+    app.state.stats_task = asyncio.create_task(daily_stats_task(app.state.serverManager))
     yield
+    task = app.state.stats_task
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
     # при необходимости: app.state.serverManager.close() / cleanup
 
 app = FastAPI(title="Subscription service", lifespan=lifespan)

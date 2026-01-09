@@ -1,11 +1,12 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
     Column,
+    Date,
     DateTime,
     ForeignKey,
     Integer,
@@ -163,3 +164,44 @@ class VpnServer(SQLModel, table=True):
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
     )
 
+
+class UserTrafficSnapshot(SQLModel, table=True):
+    __tablename__ = "user_traffic_snapshots"
+
+    day: date = Field(
+        sa_column=Column(Date, primary_key=True, nullable=False)
+    )
+    user_id: uuid.UUID = Field(
+        sa_column=Column(
+            PG_UUID(as_uuid=True),
+            ForeignKey("users.id", ondelete="CASCADE"),
+            primary_key=True,
+            nullable=False,
+        )
+    )
+    total_bytes: int = Field(
+        default=0,
+        sa_column=Column(BigInteger, nullable=False),
+    )
+    created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    )
+
+
+class DailyUsageStat(SQLModel, table=True):
+    __tablename__ = "daily_usage_stats"
+
+    day: date = Field(
+        sa_column=Column(Date, primary_key=True, nullable=False)
+    )
+    active_users: int = Field(
+        default=0,
+        sa_column=Column(Integer, nullable=False),
+    )
+    total_bytes: int = Field(
+        default=0,
+        sa_column=Column(BigInteger, nullable=False),
+    )
+    created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    )

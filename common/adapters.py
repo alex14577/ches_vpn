@@ -1,15 +1,23 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date
 from typing import Optional
 import uuid
 
 from sqlalchemy import BigInteger, Column, DateTime, String
 from sqlalchemy import select, update as sa_update, delete, cast, or_, and_, func
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.models import User, Subscription, Plan, VpnServer
+from common.models import (
+    DailyUsageStat,
+    Plan,
+    Subscription,
+    User,
+    UserTrafficSnapshot,
+    VpnServer,
+)
 
 
 class UsersAdapter:
@@ -277,12 +285,60 @@ class VpnServerAdapter:
         await self.s.delete(server)
         await self.s.flush()
 
+
+class StatsAdapter:
+    def __init__(self, session: AsyncSession):
+        self.s = session
+
+    async def user_snapshot_map(self, day: date) -> dict[uuid.UUID, int]:
+        stmt = select(UserTrafficSnapshot).where(UserTrafficSnapshot.day == day)
+        res = await self.s.execute(stmt)
+        return {row.user_id: row.total_bytes for row in res.scalars().all()}
+
+    async def upsert_user_snapshots(self, day: date, totals: dict[uuid.UUID, int]) -> None:
+        if not totals:
+            return
+
+        rows = [
+            {"day": day, "user_id": user_id, "total_bytes": total_bytes}
+            for user_id, total_bytes in totals.items()
+        ]
+        stmt = insert(UserTrafficSnapshot).values(rows)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["day", "user_id"],
+            set_={"total_bytes": stmt.excluded.total_bytes},
+        )
+        await self.s.execute(stmt)
+        await self.s.flush()
+
+    async def upsert_daily_usage(self, day: date, active_users: int, total_bytes: int) -> None:
+        stmt = insert(DailyUsageStat).values(
+            day=day,
+            active_users=int(active_users),
+            total_bytes=int(total_bytes),
+        )
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["day"],
+            set_={
+                "active_users": int(active_users),
+                "total_bytes": int(total_bytes),
+            },
+        )
+        await self.s.execute(stmt)
+        await self.s.flush()
+
+    async def list_daily_usage(self, limit: int = 30) -> list[DailyUsageStat]:
+        stmt = select(DailyUsageStat).order_by(DailyUsageStat.day.desc()).limit(limit)
+        res = await self.s.execute(stmt)
+        return list(res.scalars().all())
+
 class DbAdapters:
     def __init__(self, session: AsyncSession):
         self.users = UsersAdapter(session)
         self.subscriptions = SubscriptionAdapter(session)
         self.plans = PlanAdapter(session)
         self.servers = VpnServerAdapter(session)
+        self.stats = StatsAdapter(session)
         self._s = session
 
     async def commit(self) -> None:

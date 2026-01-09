@@ -11,6 +11,7 @@ from .views.servers import router as servers_router
 from .views.users import router as users_router
 from .views.plans import router as plans_router
 from .views.subscriptions import router as subs_router
+from .views.stats import router as stats_router
 
 templates = Jinja2Templates(directory="subscription_service/admin/templates")
 admin_router = APIRouter()
@@ -79,3 +80,4 @@ admin_router.include_router(servers_router, dependencies=[Depends(require_admin_
 admin_router.include_router(users_router, dependencies=[Depends(require_admin_dep)])
 admin_router.include_router(plans_router, dependencies=[Depends(require_admin_dep)])
 admin_router.include_router(subs_router, dependencies=[Depends(require_admin_dep)])
+admin_router.include_router(stats_router, dependencies=[Depends(require_admin_dep)])
