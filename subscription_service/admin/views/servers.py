@@ -1,4 +1,6 @@
 import uuid
+from urllib.parse import quote
+
 from fastapi import APIRouter, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -10,6 +12,10 @@ from common.logger import Logger
 
 router = APIRouter()
 templates = Jinja2Templates(directory="subscription_service/admin/templates")
+
+def _format_err(exc: Exception) -> str:
+    detail = str(exc).strip()
+    return detail or exc.__class__.__name__
 
 @router.get("/servers", response_class=HTMLResponse)
 async def servers_page(request: Request):
@@ -39,8 +45,9 @@ async def servers_create(
     try:
         serverManager: Manager = request.app.state.serverManager
         await serverManager.sync_servers_now()
-    except Exception:
-        return RedirectResponse("/admin/servers?err=Не удалось синронизировать сервера из бд", status_code=303)
+    except Exception as exc:
+        msg = f"Не удалось синхронизировать сервера из БД: {_format_err(exc)}"
+        return RedirectResponse("/admin/servers?err=" + quote(msg), status_code=303)
 
     for user in users:
         await serverManager.sync_user(user)
@@ -58,9 +65,10 @@ async def servers_delete(
     try:
         serverManager: Manager = request.app.state.serverManager
         await serverManager.sync_servers_now()
-    except Exception:
+    except Exception as exc:
         Logger.error("/admin/servers/%s/delete: Не удалось удалить сервер", server_id)
-        return RedirectResponse("/admin/servers/delete?err=Не удалось удалить сервер", status_code=303)
+        msg = f"Не удалось удалить сервер: {_format_err(exc)}"
+        return RedirectResponse("/admin/servers?err=" + quote(msg), status_code=303)
     
     return RedirectResponse(url="/admin/servers", status_code=303)
 
@@ -77,7 +85,7 @@ async def servers_sync(request: Request, server_id: uuid.UUID):
 
     for user in users:
         try:
-            await server_manager.sync_server(user=user, server_id=server_id, force=True)
+            await server_manager.sync_server(user=user, server_id=server_id)
             ok += 1
         except Exception as e:
             # лучше с traceback
@@ -87,7 +95,7 @@ async def servers_sync(request: Request, server_id: uuid.UUID):
 
     if failed:
         # можно ограничить длину, чтобы URL не раздувать
-        err = f"failed={len(failed)}/{len(users)}"
-        return RedirectResponse(f"/admin/servers/sync?err={err}", status_code=303)
+        err = f"Не удалось синхронизировать: {len(failed)}/{len(users)}"
+        return RedirectResponse("/admin/servers?err=" + quote(err), status_code=303)
 
     return RedirectResponse(url="/admin/servers", status_code=303)

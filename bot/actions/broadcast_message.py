@@ -30,6 +30,10 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not context.user_data.get("awaiting_broadcast"):
         return
 
+    # ответы на служебные сообщения бота не считаем рассылкой
+    if update.message.reply_to_message:
+        return
+
     text = update.message.text
     if not text:
         await update.message.reply_text("Можно рассылать только текст.")

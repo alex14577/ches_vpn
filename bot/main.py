@@ -23,6 +23,7 @@ from common.xui_client.registry import Manager
 from bot.actions.handler import handler
 from bot.actions import main_menu
 from bot.actions import broadcast_message
+from bot.actions import feedback
 from bot.actions.settings import TG_BOT_TOKEN, ADMIN_TG_ID
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -67,8 +68,10 @@ def build_app() -> Application:
     app.add_error_handler(on_error)
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("menu", cmd_menu))
+    app.add_handler(CallbackQueryHandler(feedback.callback_handler, pattern="^fb_"))
     app.add_handler(CallbackQueryHandler(handler))
     app.add_handler(CommandHandler("cancel", broadcast_message.cancel))
+    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, feedback.message_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, broadcast_message.message_handler))
     return app
 
