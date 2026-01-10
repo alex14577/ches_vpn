@@ -31,9 +31,12 @@ async def stats_users_page(request: Request):
 
         rows = []
         for user_id, (total_bytes, daily_bytes) in live.items():
+            user_label = user_labels.get(user_id)
+            if not user_label:
+                continue
             rows.append(
                 {
-                    "user_label": user_labels.get(user_id, str(user_id)),
+                    "user_label": user_label,
                     "daily_gb": daily_bytes / GB if daily_bytes else 0,
                     "three_gb": daily_bytes / GB if daily_bytes else 0,
                     "month_gb": daily_bytes / GB if daily_bytes else 0,
@@ -74,13 +77,16 @@ async def stats_users_page(request: Request):
 
     rows = []
     for user_id, current_row in current_map.items():
+        user_label = user_labels.get(user_id)
+        if not user_label:
+            continue
         total_bytes = current_row.total_bytes or 0
         daily_bytes = daily_by_user.get(user_id, 0)
         three_bytes = three_by_user.get(user_id, 0)
         month_bytes = month_by_user.get(user_id, 0)
         rows.append(
             {
-                "user_label": user_labels.get(user_id, str(user_id)),
+                "user_label": user_label,
                 "daily_gb": daily_bytes / GB if daily_bytes else 0,
                 "three_gb": three_bytes / GB if three_bytes else 0,
                 "month_gb": month_bytes / GB if month_bytes else 0,
