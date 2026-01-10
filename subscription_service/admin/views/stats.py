@@ -26,8 +26,12 @@ async def stats_users_page(request: Request):
     if latest_day is None:
         server_manager = request.app.state.serverManager
         live = await server_manager.collect_user_traffic()
+        label_map = await server_manager.collect_user_labels()
         users = await db_call(lambda db: db.users.all())
         user_labels = {u.id: (u.username or str(u.tg_user_id)) for u in users}
+        for user_id, label in label_map.items():
+            if user_id not in user_labels and label:
+                user_labels[user_id] = f"{label} NOT-DB"
 
         rows = []
         for user_id, (total_bytes, daily_bytes) in live.items():
@@ -57,6 +61,10 @@ async def stats_users_page(request: Request):
     users = await db_call(lambda db: db.users.all())
 
     user_labels = {u.id: (u.username or str(u.tg_user_id)) for u in users}
+    label_map = await request.app.state.serverManager.collect_user_labels()
+    for user_id, label in label_map.items():
+        if user_id not in user_labels and label:
+            user_labels[user_id] = f"{label} NOT-DB"
 
     daily_by_user: dict[uuid.UUID, int] = {}
     three_by_user: dict[uuid.UUID, int] = {}

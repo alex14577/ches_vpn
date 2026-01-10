@@ -329,6 +329,33 @@ class Manager:
 
         return result
 
+    async def collect_user_labels(self) -> dict[uuid.UUID, str]:
+        """Собрать отображаемые имена пользователей из clientStats.email."""
+        await self._ensure_synced()
+
+        async def collect_one(mc: ManagedClient):
+            async with self._io_sem:
+                return await mc.client.inbounds()
+
+        results = await asyncio.gather(*(collect_one(mc) for mc in self._clients.values()), return_exceptions=True)
+
+        labels: dict[uuid.UUID, str] = {}
+        for r in results:
+            if isinstance(r, Exception):
+                Logger.warning("collect_user_labels partial failure: %s", r)
+                continue
+            for inbound in r:
+                for cs in inbound.clientStats:
+                    try:
+                        user_id = uuid.UUID(str(cs.uuid))
+                    except Exception:
+                        continue
+                    email = (getattr(cs, "email", "") or "").strip()
+                    if email and user_id not in labels:
+                        labels[user_id] = email
+
+        return labels
+
     async def collect_configs(self, user_id: str) -> list[str]:
         """Собрать конфиги (ссылки) по всем серверам для конкретного user_id."""
         await self._ensure_synced()
