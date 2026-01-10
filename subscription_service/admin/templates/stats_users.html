@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>User stats</h1>
+{% if day %}<p class="muted">Snapshot day: {{ day }}</p>{% endif %}
+
+<section class="card">
+  <div class="table-wrap">
+    <table class="table" id="user-stats">
+      <thead>
+        <tr>
+          <th><button class="sort-btn" data-key="user" data-type="text">User<span class="sort-indicator"></span></button></th>
+          <th><button class="sort-btn" data-key="daily" data-type="number">Traffic today (GB)<span class="sort-indicator"></span></button></th>
+          <th><button class="sort-btn" data-key="three" data-type="number">Traffic last 3 days (GB)<span class="sort-indicator"></span></button></th>
+          <th><button class="sort-btn" data-key="month" data-type="number">Traffic last month (GB)<span class="sort-indicator"></span></button></th>
+          <th><button class="sort-btn" data-key="total" data-type="number">Total traffic (GB)<span class="sort-indicator"></span></button></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td data-key="user" data-value="{{ r.user_label }}">{{ r.user_label }}</td>
+          <td data-key="daily" data-value="{{ r.daily_gb }}">{{ "%.2f"|format(r.daily_gb) }}</td>
+          <td data-key="three" data-value="{{ r.three_gb }}">{{ "%.2f"|format(r.three_gb) }}</td>
+          <td data-key="month" data-value="{{ r.month_gb }}">{{ "%.2f"|format(r.month_gb) }}</td>
+          <td data-key="total" data-value="{{ r.total_gb }}">{{ "%.2f"|format(r.total_gb) }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="5" class="muted">No data yet</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<script>
+  (function () {
+    const table = document.getElementById("user-stats");
+    if (!table) return;
+    const tbody = table.querySelector("tbody");
+    const headers = Array.from(table.querySelectorAll("thead .sort-btn"));
+
+    const setIndicators = (activeBtn, dir) => {
+      headers.forEach((btn) => {
+        const ind = btn.querySelector(".sort-indicator");
+        if (!ind) return;
+        if (btn === activeBtn) {
+          ind.textContent = dir === "asc" ? " ^" : " v";
+          btn.classList.add("sort-active");
+        } else {
+          ind.textContent = "";
+          btn.classList.remove("sort-active");
+        }
+      });
+    };
+
+    headers.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const key = btn.dataset.key;
+        const type = btn.dataset.type;
+        const current = btn.dataset.dir || "desc";
+        const dir = current === "asc" ? "desc" : "asc";
+        btn.dataset.dir = dir;
+
+        const rows = Array.from(tbody.querySelectorAll("tr")).filter(
+          (tr) => tr.querySelector("td[data-key]")
+        );
+
+        rows.sort((a, b) => {
+          const aCell = a.querySelector(`td[data-key="${key}"]`);
+          const bCell = b.querySelector(`td[data-key="${key}"]`);
+          if (!aCell || !bCell) return 0;
+          const av = aCell.dataset.value || aCell.textContent || "";
+          const bv = bCell.dataset.value || bCell.textContent || "";
+
+          let cmp = 0;
+          if (type === "number") {
+            cmp = (parseFloat(av) || 0) - (parseFloat(bv) || 0);
+          } else {
+            cmp = av.localeCompare(bv);
+          }
+          return dir === "asc" ? cmp : -cmp;
+        });
+
+        rows.forEach((tr) => tbody.appendChild(tr));
+        setIndicators(btn, dir);
+      });
+    });
+  })();
+</script>
+{% endblock %}
