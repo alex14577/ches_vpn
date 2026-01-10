@@ -8,6 +8,7 @@
     <table class="table" id="user-stats">
       <thead>
         <tr>
+          <th>#</th>
           <th><button class="sort-btn" data-key="user" data-type="text">User<span class="sort-indicator"></span></button></th>
           <th><button class="sort-btn" data-key="daily" data-type="number">Traffic today (GB)<span class="sort-indicator"></span></button></th>
           <th><button class="sort-btn" data-key="three" data-type="number">Traffic last 3 days (GB)<span class="sort-indicator"></span></button></th>
@@ -18,6 +19,7 @@
       <tbody>
         {% for r in rows %}
         <tr>
+          <td>{{ loop.index }}</td>
           <td data-key="user" data-value="{{ r.user_label }}">{{ r.user_label }}</td>
           <td data-key="daily" data-value="{{ r.daily_gb }}">{{ "%.2f"|format(r.daily_gb) }}</td>
           <td data-key="three" data-value="{{ r.three_gb }}">{{ "%.2f"|format(r.three_gb) }}</td>
@@ -26,7 +28,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="5" class="muted">No data yet</td>
+          <td colspan="6" class="muted">No data yet</td>
         </tr>
         {% endfor %}
       </tbody>
