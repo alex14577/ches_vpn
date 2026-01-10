@@ -183,6 +183,10 @@ class UserTrafficSnapshot(SQLModel, table=True):
         default=0,
         sa_column=Column(BigInteger, nullable=False),
     )
+    daily_bytes: int = Field(
+        default=0,
+        sa_column=Column(BigInteger, nullable=False),
+    )
     created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     )

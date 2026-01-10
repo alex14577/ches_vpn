@@ -286,13 +286,16 @@ class Manager:
 
     @staticmethod
     def _client_total_bytes(cs) -> int:
-        total = int(getattr(cs, "up", 0)) + int(getattr(cs, "down", 0))
-        if total <= 0:
-            total = int(getattr(cs, "allTime", 0))
-        return max(0, total)
+        return max(0, int(getattr(cs, "allTime", 0)))
 
-    async def collect_user_totals(self) -> dict[uuid.UUID, int]:
-        """Собрать суммарный трафик (up+down) по пользователям со всех серверов."""
+    @staticmethod
+    def _client_daily_bytes(cs) -> int:
+        return max(0, int(getattr(cs, "up", 0)) + int(getattr(cs, "down", 0)))
+
+    async def collect_user_traffic(self) -> dict[uuid.UUID, tuple[int, int]]:
+        """Собрать суммарный трафик по пользователям со всех серверов.
+        total_bytes берётся из allTime, daily_bytes — из up+down.
+        """
         await self._ensure_synced()
 
         async def collect_one(mc: ManagedClient):
@@ -302,9 +305,10 @@ class Manager:
         results = await asyncio.gather(*(collect_one(mc) for mc in self._clients.values()), return_exceptions=True)
 
         totals: dict[uuid.UUID, int] = {}
+        daily: dict[uuid.UUID, int] = {}
         for r in results:
             if isinstance(r, Exception):
-                Logger.warning("collect_user_totals partial failure: %s", r)
+                Logger.warning("collect_user_traffic partial failure: %s", r)
                 continue
             for inbound in r:
                 for cs in inbound.clientStats:
@@ -313,11 +317,17 @@ class Manager:
                     except Exception:
                         continue
                     total_bytes = self._client_total_bytes(cs)
-                    if total_bytes <= 0:
-                        continue
-                    totals[user_id] = totals.get(user_id, 0) + total_bytes
+                    daily_bytes = self._client_daily_bytes(cs)
+                    if total_bytes > 0:
+                        totals[user_id] = totals.get(user_id, 0) + total_bytes
+                    if daily_bytes > 0:
+                        daily[user_id] = daily.get(user_id, 0) + daily_bytes
 
-        return totals
+        result: dict[uuid.UUID, tuple[int, int]] = {}
+        for user_id in set(totals) | set(daily):
+            result[user_id] = (totals.get(user_id, 0), daily.get(user_id, 0))
+
+        return result
 
     async def collect_configs(self, user_id: str) -> list[str]:
         """Собрать конфиги (ссылки) по всем серверам для конкретного user_id."""

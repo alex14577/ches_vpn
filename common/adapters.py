@@ -290,23 +290,53 @@ class StatsAdapter:
     def __init__(self, session: AsyncSession):
         self.s = session
 
-    async def user_snapshot_map(self, day: date) -> dict[uuid.UUID, int]:
+    async def latest_snapshot_day(self) -> date | None:
+        stmt = select(func.max(UserTrafficSnapshot.day))
+        res = await self.s.execute(stmt)
+        return res.scalar_one_or_none()
+
+    async def earliest_snapshot_day_since(self, since_day: date) -> date | None:
+        stmt = select(func.min(UserTrafficSnapshot.day)).where(UserTrafficSnapshot.day >= since_day)
+        res = await self.s.execute(stmt)
+        return res.scalar_one_or_none()
+
+    async def user_snapshot_map(self, day: date) -> dict[uuid.UUID, UserTrafficSnapshot]:
         stmt = select(UserTrafficSnapshot).where(UserTrafficSnapshot.day == day)
         res = await self.s.execute(stmt)
-        return {row.user_id: row.total_bytes for row in res.scalars().all()}
+        return {row.user_id: row for row in res.scalars().all()}
 
-    async def upsert_user_snapshots(self, day: date, totals: dict[uuid.UUID, int]) -> None:
+    async def user_snapshots_range(self, start_day: date, end_day: date) -> list[UserTrafficSnapshot]:
+        stmt = (
+            select(UserTrafficSnapshot)
+            .where(UserTrafficSnapshot.day >= start_day, UserTrafficSnapshot.day <= end_day)
+        )
+        res = await self.s.execute(stmt)
+        return list(res.scalars().all())
+
+    async def upsert_user_snapshots(
+        self,
+        day: date,
+        totals: dict[uuid.UUID, tuple[int, int]],
+    ) -> None:
         if not totals:
             return
 
         rows = [
-            {"day": day, "user_id": user_id, "total_bytes": total_bytes}
-            for user_id, total_bytes in totals.items()
+            {
+                "day": day,
+                "user_id": user_id,
+                "total_bytes": total_bytes,
+                "daily_bytes": daily_bytes,
+            }
+            for user_id, (total_bytes, daily_bytes) in totals.items()
         ]
         stmt = insert(UserTrafficSnapshot).values(rows)
         stmt = stmt.on_conflict_do_update(
             index_elements=["day", "user_id"],
-            set_={"total_bytes": stmt.excluded.total_bytes},
+            set_={
+                "total_bytes": stmt.excluded.total_bytes,
+                "daily_bytes": stmt.excluded.daily_bytes,
+            },
         )
         await self.s.execute(stmt)
         await self.s.flush()
