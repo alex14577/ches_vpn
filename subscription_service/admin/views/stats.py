@@ -22,19 +22,19 @@ async def stats_page(request: Request):
 
 @router.get("/stats/users", response_class=HTMLResponse)
 async def stats_users_page(request: Request):
+    server_manager = request.app.state.serverManager
+    live = await server_manager.collect_user_traffic()
+    label_map = await server_manager.collect_user_labels()
+    users = await db_call(lambda db: db.users.all())
+    user_labels = {u.id: (u.username or str(u.tg_user_id)) for u in users}
+    for user_id, label in label_map.items():
+        if user_id not in user_labels and label:
+            user_labels[user_id] = f"{label} NOT-DB"
+
     latest_day = await db_call(lambda db: db.stats.latest_snapshot_day())
     if latest_day is None:
-        server_manager = request.app.state.serverManager
-        live = await server_manager.collect_user_traffic()
-        label_map = await server_manager.collect_user_labels()
-        users = await db_call(lambda db: db.users.all())
-        user_labels = {u.id: (u.username or str(u.tg_user_id)) for u in users}
-        for user_id, label in label_map.items():
-            if user_id not in user_labels and label:
-                user_labels[user_id] = f"{label} NOT-DB"
-
         rows = []
-        for user_id, (total_bytes, daily_bytes) in live.items():
+        for user_id, (_, daily_bytes) in live.items():
             user_label = user_labels.get(user_id)
             if not user_label:
                 continue
@@ -42,13 +42,13 @@ async def stats_users_page(request: Request):
                 {
                     "user_label": user_label,
                     "daily_gb": daily_bytes / GB if daily_bytes else 0,
-                    "three_gb": daily_bytes / GB if daily_bytes else 0,
-                    "month_gb": daily_bytes / GB if daily_bytes else 0,
-                    "total_gb": total_bytes / GB if total_bytes else 0,
+                    "three_gb": 0,
+                    "month_gb": 0,
+                    "total_gb": 0,
                 }
             )
 
-        rows.sort(key=lambda r: (r["daily_gb"], r["total_gb"]), reverse=True)
+        rows.sort(key=lambda r: (r["daily_gb"], r["user_label"]), reverse=True)
         return templates.TemplateResponse(
             "stats_users.html",
             {"request": request, "rows": rows, "day": None},
@@ -84,18 +84,18 @@ async def stats_users_page(request: Request):
             month_by_user[uid] = month_by_user.get(uid, 0) + daily
 
     rows = []
-    for user_id, current_row in current_map.items():
-        user_label = user_labels.get(user_id)
-        if not user_label:
-            continue
-        total_bytes = current_row.total_bytes or 0
-        daily_bytes = daily_by_user.get(user_id, 0)
+    for user_id, user_label in user_labels.items():
+        live_daily = live.get(user_id, (0, 0))[1]
+        current_row = current_map.get(user_id)
+        total_bytes = current_row.total_bytes if current_row else 0
         three_bytes = three_by_user.get(user_id, 0)
         month_bytes = month_by_user.get(user_id, 0)
+        if live_daily <= 0 and total_bytes <= 0 and three_bytes <= 0 and month_bytes <= 0:
+            continue
         rows.append(
             {
                 "user_label": user_label,
-                "daily_gb": daily_bytes / GB if daily_bytes else 0,
+                "daily_gb": live_daily / GB if live_daily else 0,
                 "three_gb": three_bytes / GB if three_bytes else 0,
                 "month_gb": month_bytes / GB if month_bytes else 0,
                 "total_gb": total_bytes / GB if total_bytes else 0,
