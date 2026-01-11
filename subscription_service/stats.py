@@ -26,7 +26,14 @@ async def collect_daily_usage(server_manager: Manager, *, snapshot_day: date | N
     current_snapshot = await db_call(lambda db: db.stats.user_snapshot_map(snap_day))
     if not current_snapshot:
         current_snapshot = await server_manager.collect_user_traffic()
-        await db_call(lambda db: db.stats.upsert_user_snapshots(snap_day, current_snapshot))
+        users = await db_call(lambda db: db.users.all())
+        known_ids = {u.id for u in users}
+        filtered_snapshot = {
+            user_id: traffic
+            for user_id, traffic in current_snapshot.items()
+            if user_id in known_ids
+        }
+        await db_call(lambda db: db.stats.upsert_user_snapshots(snap_day, filtered_snapshot))
         current_snapshot = await db_call(lambda db: db.stats.user_snapshot_map(snap_day))
 
     total_bytes = 0
