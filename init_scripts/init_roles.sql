@@ -1,4 +1,4 @@
--- init_roles.sql
+-- .
 -- Выполнять под DBA/миграционной ролью (не под сервисными ролями).
 -- Создаёт роли sub_creator / sub_verifier / sub_reader если их нет, включает RLS/политики,
 -- и настраивает права на subscriptions.
@@ -41,8 +41,16 @@ $$;
 
 -- 2) RLS
 ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE subscriptions FORCE ROW LEVEL SECURITY;
 
 -- 3) Политики (создаём/пересоздаём идемпотентно)
+DROP POLICY IF EXISTS subs_select_all ON subscriptions;
+CREATE POLICY subs_select_all
+ON subscriptions
+FOR SELECT
+TO sub_creator, sub_verifier, sub_reader
+USING (true);
+
 DROP POLICY IF EXISTS subs_creator_insert_pending ON subscriptions;
 DO $$
 BEGIN
@@ -78,6 +86,20 @@ BEGIN
 END
 $$;
 
+DROP POLICY IF EXISTS subs_update_no_status_change ON subscriptions;
+CREATE POLICY subs_update_no_status_change
+ON subscriptions
+FOR UPDATE
+TO sub_creator
+USING (true)
+WITH CHECK (
+  status = (
+    SELECT s.status
+    FROM subscriptions AS s
+    WHERE s.id = subscriptions.id
+  )
+);
+
 DROP POLICY IF EXISTS subs_verifier_update_pending ON subscriptions;
 CREATE POLICY subs_verifier_update_pending
 ON subscriptions
@@ -86,21 +108,34 @@ TO sub_verifier
 USING (status = 'pending_payment')
 WITH CHECK (status IN ('active','payment_failed','canceled','expired'));
 
-DROP POLICY IF EXISTS subs_reader_select ON subscriptions;
-CREATE POLICY subs_reader_select
+DROP POLICY IF EXISTS subs_reader_insert_all ON subscriptions;
+CREATE POLICY subs_reader_insert_all
 ON subscriptions
-FOR SELECT
+FOR INSERT
 TO sub_reader
-USING (true);
+WITH CHECK (true);
+
+DROP POLICY IF EXISTS subs_reader_update_all ON subscriptions;
+CREATE POLICY subs_reader_update_all
+ON subscriptions
+FOR UPDATE
+TO sub_reader
+USING (true)
+WITH CHECK (true);
 
 -- 4) Права
 REVOKE ALL ON subscriptions FROM sub_creator;
 REVOKE ALL ON subscriptions FROM sub_verifier;
 REVOKE ALL ON subscriptions FROM sub_reader;
 
-GRANT SELECT, INSERT ON subscriptions TO sub_creator;
+GRANT SELECT, INSERT, UPDATE ON subscriptions TO sub_creator;
+GRANT SELECT, UPDATE(status, updated_at) ON subscriptions TO sub_verifier;
+GRANT SELECT, INSERT, UPDATE ON subscriptions TO sub_reader;
 
-GRANT SELECT ON subscriptions TO sub_verifier;
-GRANT UPDATE(status, updated_at) ON subscriptions TO sub_verifier;
+REVOKE UPDATE(status) ON subscriptions FROM sub_creator;
 
-GRANT SELECT ON subscriptions TO sub_reader;
+GRANT USAGE ON SCHEMA public TO sub_creator, sub_verifier, sub_reader;
+GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO sub_creator, sub_verifier, sub_reader;
+GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO sub_creator, sub_verifier, sub_reader;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE ON TABLES TO sub_creator, sub_verifier, sub_reader;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO sub_creator, sub_verifier, sub_reader;
