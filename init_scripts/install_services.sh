@@ -273,6 +273,13 @@ SQL
     echo "Creating database '$pg_db' owned by '$pg_user'"
     sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE DATABASE $pg_db OWNER $pg_user;"
   fi
+
+  # 3) Ensure schema privileges for migrations
+  sudo -u postgres psql -v ON_ERROR_STOP=1 -d "$pg_db" <<SQL
+GRANT USAGE, CREATE ON SCHEMA public TO $pg_user;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO $pg_user;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO $pg_user;
+SQL
 }
 
 
