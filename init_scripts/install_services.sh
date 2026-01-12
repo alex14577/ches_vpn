@@ -315,7 +315,9 @@ run_init_sql() {
     exit 1
   fi
 
-  sudo -u postgres psql -v ON_ERROR_STOP=1 -d "$db_name" -f "$roles_sql"
+  sudo -u postgres psql -v ON_ERROR_STOP=1 \
+    -v db_owner="$VPN_SUBSCRIPTION_DB_USERNAME" \
+    -d "$db_name" -f "$roles_sql"
   sudo -u postgres psql -v ON_ERROR_STOP=1 \
     -v vpn_bot_username="$VPN_BOT_DB_USERNAME" \
     -v vpn_bot_password="$VPN_BOT_DB_PASSWORD" \

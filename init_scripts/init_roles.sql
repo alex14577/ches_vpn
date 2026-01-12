@@ -39,6 +39,30 @@ BEGIN
 END
 $$;
 
+-- matched_event_id (может появиться позже; добавляем безопасно)
+ALTER TABLE subscriptions
+  ADD COLUMN IF NOT EXISTS matched_event_id UUID;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.tables
+    WHERE table_name = 'payment_events'
+  ) AND NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'subscriptions_matched_event_id_fkey'
+  ) THEN
+    ALTER TABLE subscriptions
+      ADD CONSTRAINT subscriptions_matched_event_id_fkey
+      FOREIGN KEY (matched_event_id)
+      REFERENCES payment_events(id)
+      ON DELETE SET NULL;
+  END IF;
+END
+$$;
+
 -- 2) RLS
 ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE subscriptions FORCE ROW LEVEL SECURITY;
@@ -139,3 +163,5 @@ GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO sub_creator, sub_
 GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO sub_creator, sub_verifier, sub_reader;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE ON TABLES TO sub_creator, sub_verifier, sub_reader;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO sub_creator, sub_verifier, sub_reader;
+ALTER DEFAULT PRIVILEGES FOR ROLE :"db_owner" IN SCHEMA public GRANT SELECT, INSERT, UPDATE ON TABLES TO sub_creator, sub_verifier, sub_reader;
+ALTER DEFAULT PRIVILEGES FOR ROLE :"db_owner" IN SCHEMA public GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO sub_creator, sub_verifier, sub_reader;
