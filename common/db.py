@@ -16,10 +16,10 @@ from common.adapters import DbAdapters
 # postgresql+psycopg://localhost:5432/app
 # или
 # postgresql+asyncpg://localhost:5432/app
-DB_DRIVER = os.environ.get("DB_DRIVER", "postgresql+psycopg")
-DB_HOST = os.environ.get("DB_HOST", "localhost")
-DB_PORT = os.environ.get("DB_PORT", "5432")
-DB_NAME = os.environ.get("DB_NAME", "app")
+DB_DRIVER = os.environ.get("DB_DRIVER") or "postgresql+psycopg"
+DB_HOST = os.environ.get("DB_HOST") or "localhost"
+DB_PORT = os.environ.get("DB_PORT") or "5432"
+DB_NAME = os.environ.get("DB_NAME") or "app"
 DB_URL = f"{DB_DRIVER}://{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
 engine: AsyncEngine | None = None

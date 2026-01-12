@@ -283,7 +283,6 @@ run_migrations() {
     set -e
     cd '$TARGET_DIR'
     . .venv/bin/activate
-    DB_DRIVER='${DB_DRIVER:-}' \
     DB_HOST='$DB_HOST' \
     DB_PORT='$DB_PORT' \
     DB_NAME='$DB_NAME' \
