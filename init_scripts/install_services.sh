@@ -400,8 +400,8 @@ ensure_venv_and_deps
 read_and_export_env
 write_env_file
 ensure_postgres_role_and_db
-run_init_sql
 run_migrations
+run_init_sql
 
 create_creds_file
 install_units "$UNIT_SRC_DIR"
