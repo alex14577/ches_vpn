@@ -3,11 +3,11 @@ from contextlib import asynccontextmanager
 
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
-from sqlmodel import AsyncEngine
 from typing import Any, Awaitable, Callable
 
 from common.adapters import DbAdapters
