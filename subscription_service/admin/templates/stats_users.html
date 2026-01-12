@@ -19,7 +19,7 @@
       <tbody>
         {% for r in rows %}
         <tr>
-          <td>{{ loop.index }}</td>
+          <td data-rownum="1">{{ loop.index }}</td>
           <td data-key="user" data-value="{{ r.user_label }}">{{ r.user_label }}</td>
           <td data-key="daily" data-value="{{ r.daily_gb }}">{{ "%.2f"|format(r.daily_gb) }}</td>
           <td data-key="three" data-value="{{ r.three_gb }}">{{ "%.2f"|format(r.three_gb) }}</td>
@@ -86,6 +86,10 @@
         });
 
         rows.forEach((tr) => tbody.appendChild(tr));
+        rows.forEach((tr, idx) => {
+          const numCell = tr.querySelector("td[data-rownum]");
+          if (numCell) numCell.textContent = String(idx + 1);
+        });
         setIndicators(btn, dir);
       });
     });
