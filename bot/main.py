@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 
 from telegram import (
     BotCommand,
@@ -16,7 +17,7 @@ from telegram.ext import (
     filters
 )
 
-from common.db import db_call
+from common.db import db_call, init_db_engine
 from bot.reports import daily_report_task
 from common.logger import Logger, Level
 from common.xui_client.registry import Manager
@@ -77,6 +78,10 @@ def build_app() -> Application:
 
 
 def main() -> None:
+    init_db_engine(
+        os.environ["VPN_BOT_DB_USERNAME"],
+        os.environ["VPN_BOT_DB_PASSWORD"],
+    )
     app = build_app()
     Logger.info("Bot started")
     app.run_polling(allowed_updates=Update.ALL_TYPES)

@@ -1,4 +1,5 @@
 import uuid
+import enum
 from datetime import datetime, date
 from typing import Optional
 
@@ -12,12 +13,12 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    UniqueConstraint,
     func
 )
 
-from sqlalchemy.dialects.postgresql import UUID, JSONB, UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import UUID, ENUM, JSONB, UUID as PG_UUID
 from sqlmodel import Field, Relationship, SQLModel
+from sqlalchemy.orm import DeclarativeBase
 
 
 class User(SQLModel, table=True):
@@ -96,6 +97,18 @@ class Plan(SQLModel, table=True):
         sa_relationship_kwargs={"lazy": "selectin"},
     )
 
+class SubscriptionStatus(str, enum.Enum):
+    pending_payment = "pending_payment"
+    active = "active"
+    payment_failed = "payment_failed"
+    canceled = "canceled"
+    expired = "expired"
+
+pg_status_enum = ENUM(
+    SubscriptionStatus,
+    name="subscription_status",
+    create_type=True,
+)
 
 class Subscription(SQLModel, table=True):
     __tablename__ = "subscriptions"
@@ -122,10 +135,22 @@ class Subscription(SQLModel, table=True):
             index=True,
         )
     )
+    
+    expected_amount_minor: int = Field(sa_column=Column(Integer, nullable=False))
 
-    status: str = Field(sa_column=Column(String(16), nullable=False))  # active/expired/canceled
+    status: SubscriptionStatus = Field(sa_column=Column(pg_status_enum, nullable=False))  # pending_payment/active/payment_failed/canceled/expired
     valid_from: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False))
     valid_until: datetime = Field(sa_column=Column(DateTime(timezone=True)))
+
+    matched_event_id: Optional[uuid.UUID] = Field(
+        default=None,
+        sa_column=Column(
+            PG_UUID(as_uuid=True),
+            ForeignKey("payment_events.id", ondelete="SET NULL"),
+            nullable=True,
+            index=True,
+        ),
+    )
 
     created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -134,15 +159,33 @@ class Subscription(SQLModel, table=True):
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
     )
 
-    user: "User" = Relationship(
-        back_populates="subscriptions",
-        sa_relationship_kwargs={"lazy": "selectin"},
-    )
-    plan: "Plan" = Relationship(
-        back_populates="subscriptions",
-        sa_relationship_kwargs={"lazy": "selectin"},
-    )
+    user: "User" = Relationship(back_populates="subscriptions", sa_relationship_kwargs={"lazy": "selectin"})
+    plan: "Plan" = Relationship(back_populates="subscriptions", sa_relationship_kwargs={"lazy": "selectin"})
 
+class Base(DeclarativeBase):
+    pass
+
+class PaymentEvent():
+    __tablename__ = "payment_events"
+
+    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+    source = Column(String(32), nullable=False)  # vk / email / sms / ...
+    received_at = Column(DateTime(timezone=True), nullable=False, index=True)
+
+    # store text + metadata (peer_id, sender_id, message_id, etc.)
+    payload = Column(JSONB, nullable=False)
+
+    # amount in minor units (kopeks/cents)
+    amount_minor = Column(Integer, nullable=False)
+
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    def __repr__(self) -> str:
+        return (
+            f"PaymentEvent(id={self.id}, source={self.source!r}, received_at={self.received_at!r}, "
+            f"amount_minor={self.amount_minor})"
+        )
 
 class VpnServer(SQLModel, table=True):
     __tablename__ = "vpn_servers"

@@ -1,35 +1,51 @@
 import os
 from contextlib import asynccontextmanager
 
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
-from sqlmodel import SQLModel
+from sqlmodel import AsyncEngine
 from typing import Any, Awaitable, Callable
 
 from common.adapters import DbAdapters
 
-DB_URL = os.environ["DATABASE_URL"]
 # пример:
-# postgresql+psycopg://alex:1234@localhost:5432/app
+# postgresql+psycopg://localhost:5432/app
 # или
-# postgresql+asyncpg://alex:1234@localhost:5432/app
+# postgresql+asyncpg://localhost:5432/app
+DB_DRIVER = os.environ.get("DB_DRIVER", "postgresql+psycopg")
+DB_HOST = os.environ.get("DB_HOST", "localhost")
+DB_PORT = os.environ.get("DB_PORT", "5432")
+DB_NAME = os.environ.get("DB_NAME", "app")
+DB_URL = f"{DB_DRIVER}://{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
-engine = create_async_engine(
-    DB_URL,
-    pool_pre_ping=True,
-)
+engine: AsyncEngine | None = None
+
+def create_engine_with_credentials(username: str, password: str):
+    url = make_url(DB_URL).set(username=username, password=password)
+    return create_async_engine(
+        url,
+        pool_pre_ping=True,
+    )
+
+def init_db_engine(username: str, password: str) -> AsyncEngine:
+    global engine
+    engine = create_engine_with_credentials(username, password)
+    SessionLocal.configure(bind=engine)
+    return engine
 
 SessionLocal = async_sessionmaker(
-    bind=engine,
     class_=AsyncSession,
     expire_on_commit=False,
 )
 
 @asynccontextmanager
 async def get_session():
+    if engine is None:
+        raise RuntimeError("DB engine is not initialized. Call init_db_engine().")
     async with SessionLocal() as session:
         yield session
 

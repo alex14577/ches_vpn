@@ -131,33 +131,81 @@ load_env_if_exists() {
 read_and_export_env() {
   if load_env_if_exists; then
     echo "[INFO] Using credentials from $ENV_FILE"
-    return
   fi
 
-  echo "[INFO] Env file not found, asking for credentials"
+  : "${VPN_SUBSCRIPTION_DB_USERNAME:=subscription}"
+  : "${VPN_SUBSCRIPTION_DB_PASSWORD:=1234}"
+  : "${VPN_BOT_DB_USERNAME:=bot}"
+  : "${VPN_BOT_DB_PASSWORD:=1234}"
+  : "${VPN_WORKER_DB_USERNAME:=woker}"
+  : "${VPN_WORKER_DB_PASSWORD:=1234}"
+  : "${DB_NAME:=app}"
 
-  read -rp "Telegram bot token: " TG_BOT_TOKEN
-  read -rp "Postgres user: " DB_USER
-  read -rsp "Postgres password: " DB_PASSWORD
-  echo
-  read -rp "Postgres DB name: " DB_NAME
-  read -rp "Postgres DB name: " DB_NAME
+  if [[ -z "${TG_BOT_TOKEN:-}" ]]; then
+    read -rp "Telegram bot token: " TG_BOT_TOKEN
+  fi
+
+  if [[ -z "${VPN_SUBSCRIPTION_DB_USERNAME:-}" ]]; then
+    read -rp "VPN_SUBSCRIPTION_DB_USERNAME: " VPN_SUBSCRIPTION_DB_USERNAME
+  fi
+  if [[ -z "${VPN_SUBSCRIPTION_DB_PASSWORD:-}" ]]; then
+    VPN_SUBSCRIPTION_DB_PASSWORD="$(prompt_secret VPN_SUBSCRIPTION_DB_PASSWORD)"
+  fi
+
+  if [[ -z "${VPN_BOT_DB_USERNAME:-}" ]]; then
+    read -rp "VPN_BOT_DB_USERNAME: " VPN_BOT_DB_USERNAME
+  fi
+  if [[ -z "${VPN_BOT_DB_PASSWORD:-}" ]]; then
+    VPN_BOT_DB_PASSWORD="$(prompt_secret VPN_BOT_DB_PASSWORD)"
+  fi
+
+  if [[ -z "${VPN_WORKER_DB_USERNAME:-}" ]]; then
+    read -rp "VPN_WORKER_DB_USERNAME: " VPN_WORKER_DB_USERNAME
+  fi
+  if [[ -z "${VPN_WORKER_DB_PASSWORD:-}" ]]; then
+    VPN_WORKER_DB_PASSWORD="$(prompt_secret VPN_WORKER_DB_PASSWORD)"
+  fi
+
+  if [[ -z "${DB_NAME:-}" ]]; then
+    read -rp "Postgres DB name: " DB_NAME
+  fi
 
   export TG_BOT_TOKEN
-  export DB_USER
-  export DB_PASSWORD
+  export VPN_SUBSCRIPTION_DB_USERNAME
+  export VPN_SUBSCRIPTION_DB_PASSWORD
+  export VPN_BOT_DB_USERNAME
+  export VPN_BOT_DB_PASSWORD
+  export VPN_WORKER_DB_USERNAME
+  export VPN_WORKER_DB_PASSWORD
   export DB_NAME
   
   : "${DB_HOST:=127.0.0.1}"
   : "${DB_PORT:=5432}"
   export DB_HOST DB_PORT
-  export DATABASE_URL="postgresql+psycopg://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
 }
 
 
 write_env_file() {
   if [[ -f "$ENV_FILE" ]]; then
-    echo "[INFO] Env file already exists, skipping write"
+    echo "[INFO] Env file already exists, ensuring required vars"
+    if ! grep -q "^VPN_SUBSCRIPTION_DB_USERNAME=" "$ENV_FILE"; then
+      echo "VPN_SUBSCRIPTION_DB_USERNAME=$VPN_SUBSCRIPTION_DB_USERNAME" >>"$ENV_FILE"
+    fi
+    if ! grep -q "^VPN_SUBSCRIPTION_DB_PASSWORD=" "$ENV_FILE"; then
+      echo "VPN_SUBSCRIPTION_DB_PASSWORD=$VPN_SUBSCRIPTION_DB_PASSWORD" >>"$ENV_FILE"
+    fi
+    if ! grep -q "^VPN_BOT_DB_USERNAME=" "$ENV_FILE"; then
+      echo "VPN_BOT_DB_USERNAME=$VPN_BOT_DB_USERNAME" >>"$ENV_FILE"
+    fi
+    if ! grep -q "^VPN_BOT_DB_PASSWORD=" "$ENV_FILE"; then
+      echo "VPN_BOT_DB_PASSWORD=$VPN_BOT_DB_PASSWORD" >>"$ENV_FILE"
+    fi
+    if ! grep -q "^VPN_WORKER_DB_USERNAME=" "$ENV_FILE"; then
+      echo "VPN_WORKER_DB_USERNAME=$VPN_WORKER_DB_USERNAME" >>"$ENV_FILE"
+    fi
+    if ! grep -q "^VPN_WORKER_DB_PASSWORD=" "$ENV_FILE"; then
+      echo "VPN_WORKER_DB_PASSWORD=$VPN_WORKER_DB_PASSWORD" >>"$ENV_FILE"
+    fi
     return
   fi
 
@@ -167,12 +215,15 @@ write_env_file() {
 
   cat >"$ENV_FILE" <<EOF
 TG_BOT_TOKEN=$TG_BOT_TOKEN
-DB_USER=$DB_USER
-DB_PASSWORD=$DB_PASSWORD
+VPN_SUBSCRIPTION_DB_USERNAME=$VPN_SUBSCRIPTION_DB_USERNAME
+VPN_SUBSCRIPTION_DB_PASSWORD=$VPN_SUBSCRIPTION_DB_PASSWORD
+VPN_BOT_DB_USERNAME=$VPN_BOT_DB_USERNAME
+VPN_BOT_DB_PASSWORD=$VPN_BOT_DB_PASSWORD
+VPN_WORKER_DB_USERNAME=$VPN_WORKER_DB_USERNAME
+VPN_WORKER_DB_PASSWORD=$VPN_WORKER_DB_PASSWORD
 DB_NAME=$DB_NAME
 DB_HOST=$DB_HOST
 DB_PORT=$DB_PORT
-DATABASE_URL=$DATABASE_URL
 EOF
 
   chown "$SERVICE_USER:$SERVICE_GROUP" "$ENV_FILE"
@@ -181,65 +232,26 @@ EOF
 
 
 ensure_postgres_role_and_db() {
-  if [[ -z "${DATABASE_URL:-}" ]]; then
-    if [[ -n "${DB_USER:-}" && -n "${DB_NAME:-}" ]]; then
-      : "${DB_HOST:=127.0.0.1}"
-      : "${DB_PORT:=5432}"
-      export DATABASE_URL="postgresql+psycopg://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
-      echo "[INFO] DATABASE_URL was empty; constructed it from DB_* variables"
-    else
-      echo "ERROR: DATABASE_URL is empty"
-      exit 1
-    fi
-  fi
-  echo "Ensuring PostgreSQL role and database from DATABASE_URL"
-
-  # Парсим URL надёжно через Python (читает DATABASE_URL из env)
-  local parsed
-  parsed="$(python3 - <<'PY'
-import os, sys
-from urllib.parse import urlparse
-
-url = os.environ.get("DATABASE_URL", "")
-if not url:
-    print("ERROR: DATABASE_URL is empty", file=sys.stderr)
-    sys.exit(1)
-
-url2 = url.replace("postgresql+psycopg://", "postgresql://", 1)\
-          .replace("postgresql+psycopg2://", "postgresql://", 1)\
-          .replace("postgresql+asyncpg://", "postgresql://", 1)
-
-u = urlparse(url2)
-user = u.username or ""
-password = u.password or ""
-host = u.hostname or "localhost"
-port = u.port or 5432
-db = (u.path or "/")[1:]  # strip leading /
-
-print(f"{user}\n{password}\n{host}\n{port}\n{db}")
-PY
-)"
-
-  local pg_user pg_password pg_host pg_port pg_db
-  pg_user="$(echo "$parsed" | sed -n '1p')"
-  pg_password="$(echo "$parsed" | sed -n '2p')"
-  pg_host="$(echo "$parsed" | sed -n '3p')"
-  pg_port="$(echo "$parsed" | sed -n '4p')"
-  pg_db="$(echo "$parsed" | sed -n '5p')"
-
-  if [[ -z "$pg_user" || -z "$pg_db" ]]; then
-    echo "ERROR: failed to parse DATABASE_URL (user or db is empty)"
+  if [[ -z "${DB_NAME:-}" || -z "${VPN_SUBSCRIPTION_DB_USERNAME:-}" || -z "${VPN_SUBSCRIPTION_DB_PASSWORD:-}" ]]; then
+    echo "ERROR: DB_NAME/VPN_SUBSCRIPTION_DB_USERNAME/VPN_SUBSCRIPTION_DB_PASSWORD must be set"
     exit 1
   fi
 
-  if [[ "$pg_host" != "localhost" && "$pg_host" != "127.0.0.1" ]]; then
-    echo "Remote PostgreSQL detected ($pg_host), skipping role/db creation"
+  : "${DB_HOST:=127.0.0.1}"
+  : "${DB_PORT:=5432}"
+
+  if [[ "$DB_HOST" != "localhost" && "$DB_HOST" != "127.0.0.1" ]]; then
+    echo "Remote PostgreSQL detected ($DB_HOST), skipping role/db creation"
     return 0
   fi
 
+  local pg_user="$VPN_SUBSCRIPTION_DB_USERNAME"
+  local pg_password="$VPN_SUBSCRIPTION_DB_PASSWORD"
+  local pg_db="$DB_NAME"
+
   echo "Postgres user: $pg_user"
   echo "Postgres db:   $pg_db"
-  echo "Postgres port: $pg_port"
+  echo "Postgres port: $DB_PORT"
 
   # 1) Ensure role (OK to do in DO)
   sudo -u postgres psql -v ON_ERROR_STOP=1 <<SQL
@@ -271,9 +283,41 @@ run_migrations() {
     set -e
     cd '$TARGET_DIR'
     . .venv/bin/activate
-    DATABASE_URL='$DATABASE_URL' \
+    DB_DRIVER='${DB_DRIVER:-}' \
+    DB_HOST='$DB_HOST' \
+    DB_PORT='$DB_PORT' \
+    DB_NAME='$DB_NAME' \
+    VPN_SUBSCRIPTION_DB_USERNAME='$VPN_SUBSCRIPTION_DB_USERNAME' \
+    VPN_SUBSCRIPTION_DB_PASSWORD='$VPN_SUBSCRIPTION_DB_PASSWORD' \
       python migrate.py
   "
+}
+
+run_init_sql() {
+  echo "Running init SQL scripts"
+
+  if [[ -z "${DB_NAME:-}" ]]; then
+    echo "ERROR: DB_NAME is empty"
+    exit 1
+  fi
+  local db_name="$DB_NAME"
+  local roles_sql="$TARGET_DIR/init_scripts/init_roles.sql"
+  local users_sql="$TARGET_DIR/init_scripts/create_users_db.sql"
+
+  if [[ ! -f "$roles_sql" || ! -f "$users_sql" ]]; then
+    echo "ERROR: init SQL scripts not found in $TARGET_DIR/init_scripts"
+    exit 1
+  fi
+
+  sudo -u postgres psql -v ON_ERROR_STOP=1 -d "$db_name" -f "$roles_sql"
+  sudo -u postgres psql -v ON_ERROR_STOP=1 \
+    -v vpn_bot_username="$VPN_BOT_DB_USERNAME" \
+    -v vpn_bot_password="$VPN_BOT_DB_PASSWORD" \
+    -v vpn_worker_username="$VPN_WORKER_DB_USERNAME" \
+    -v vpn_worker_password="$VPN_WORKER_DB_PASSWORD" \
+    -v vpn_subscription_username="$VPN_SUBSCRIPTION_DB_USERNAME" \
+    -v vpn_subscription_password="$VPN_SUBSCRIPTION_DB_PASSWORD" \
+    -d "$db_name" -f "$users_sql"
 }
 
 install_units() {
@@ -356,6 +400,7 @@ ensure_venv_and_deps
 read_and_export_env
 write_env_file
 ensure_postgres_role_and_db
+run_init_sql
 run_migrations
 
 create_creds_file

@@ -1,19 +1,25 @@
 from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
+import os
 
 from typing import Optional
 
 from fastapi import FastAPI, Response
 
 from common.models import User
-from common.db import db_call
+from common.db import db_call, init_db_engine
 from common.logger import Logger, Level
 from common.xui_client.registry import Manager
 from subscription_service.stats import daily_stats_task
 
 from subscription_service.admin.router import admin_router
 from fastapi.staticfiles import StaticFiles
+
+init_db_engine(
+    os.environ["VPN_SUBSCRIPTION_DB_USERNAME"],
+    os.environ["VPN_SUBSCRIPTION_DB_PASSWORD"],
+)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
