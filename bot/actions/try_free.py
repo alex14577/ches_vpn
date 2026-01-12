@@ -16,10 +16,14 @@ async def try_free(tg_user_id, username, serversManager: Manager):
                                                                       planId=plan.id))
     
     if sub is None:
-        sub: Subscription = await db_call(lambda db: db.subscriptions.add(user_id=user.id,
-                                                                          plan_id=plan.id,
-                                                                          valid_from=datetime.now(timezone.utc),
-                                                                          valid_until=None))
+        sub: Subscription = await db_call(lambda db: db.subscriptions.add(
+            user_id=user.id,
+            plan_id=plan.id,
+            valid_from=datetime.now(timezone.utc),
+            valid_until=None,
+            expected_amount_minor=plan.price_rub,
+            status="pending_payment",
+        ))
         
     try:
         await serversManager.sync_user(user)

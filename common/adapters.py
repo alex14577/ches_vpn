@@ -131,7 +131,7 @@ class UsersAdapter:
 
 
 class SubscriptionAdapter:
-    PENDING = "pending"
+    PENDING = "pending_payment"
     ACTIVE = "active"
     EXPIRED = "expired"
 
@@ -143,7 +143,7 @@ class SubscriptionAdapter:
         now = datetime.now(timezone.utc)
 
         if valid_from > now:
-            return "pending"
+            return "pending_payment"
 
         if valid_until is None:
             return "active"
@@ -156,13 +156,21 @@ class SubscriptionAdapter:
         plan_id: uuid.UUID,
         valid_from: datetime,
         valid_until: Optional[datetime],
+        *,
+        expected_amount_minor: Optional[int] = None,
+        status: Optional[str] = None,
     ) -> Subscription:
+        if expected_amount_minor is None:
+            expected_amount_minor = 0
+        if status is None:
+            status = self._calc_status(valid_from, valid_until)
         sub = Subscription(
             user_id=user_id,
             plan_id=plan_id,
             valid_from=valid_from,
             valid_until=valid_until,
-            status=self._calc_status(valid_from, valid_until),
+            status=status,
+            expected_amount_minor=expected_amount_minor,
         )
         self.s.add(sub)
         await self.s.flush()

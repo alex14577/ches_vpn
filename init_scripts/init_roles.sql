@@ -91,7 +91,7 @@ BEGIN
       TO sub_creator
       WITH CHECK (
         status = 'pending_payment'
-        AND expected_amount_minor > 0
+        AND expected_amount_minor >= 0
         AND matched_event_id IS NULL
       )
     $sql$;
@@ -103,7 +103,7 @@ BEGIN
       TO sub_creator
       WITH CHECK (
         status = 'pending_payment'
-        AND expected_amount_minor > 0
+        AND expected_amount_minor >= 0
       )
     $sql$;
   END IF;
