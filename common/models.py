@@ -165,21 +165,26 @@ class Subscription(SQLModel, table=True):
 class Base(DeclarativeBase):
     pass
 
-class PaymentEvent():
+class PaymentEvent(SQLModel, table=True):
     __tablename__ = "payment_events"
 
-    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: uuid.UUID = Field(
+        default_factory=uuid.uuid4,
+        sa_column=Column(PG_UUID(as_uuid=True), primary_key=True),
+    )
 
-    source = Column(String(32), nullable=False)  # vk / email / sms / ...
-    received_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    source: str = Field(sa_column=Column(String(32), nullable=False))  # vk / email / sms / ...
+    received_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False, index=True))
 
     # store text + metadata (peer_id, sender_id, message_id, etc.)
-    payload = Column(JSONB, nullable=False)
+    payload: dict = Field(sa_column=Column(JSONB, nullable=False))
 
     # amount in minor units (kopeks/cents)
-    amount_minor = Column(Integer, nullable=False)
+    amount_minor: int = Field(sa_column=Column(Integer, nullable=False))
 
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    )
 
     def __repr__(self) -> str:
         return (
