@@ -44,15 +44,39 @@ ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
 
 -- 3) Политики (создаём/пересоздаём идемпотентно)
 DROP POLICY IF EXISTS subs_creator_insert_pending ON subscriptions;
-CREATE POLICY subs_creator_insert_pending
-ON subscriptions
-FOR INSERT
-TO sub_creator
-WITH CHECK (
-  status = 'pending_payment'
-  AND expected_amount_minor > 0
-  AND matched_event_id IS NULL
-);
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'subscriptions'
+      AND column_name = 'matched_event_id'
+  ) THEN
+    EXECUTE $sql$
+      CREATE POLICY subs_creator_insert_pending
+      ON subscriptions
+      FOR INSERT
+      TO sub_creator
+      WITH CHECK (
+        status = 'pending_payment'
+        AND expected_amount_minor > 0
+        AND matched_event_id IS NULL
+      )
+    $sql$;
+  ELSE
+    EXECUTE $sql$
+      CREATE POLICY subs_creator_insert_pending
+      ON subscriptions
+      FOR INSERT
+      TO sub_creator
+      WITH CHECK (
+        status = 'pending_payment'
+        AND expected_amount_minor > 0
+      )
+    $sql$;
+  END IF;
+END
+$$;
 
 DROP POLICY IF EXISTS subs_verifier_update_pending ON subscriptions;
 CREATE POLICY subs_verifier_update_pending
