@@ -34,7 +34,7 @@ BEGIN
   ) THEN
     ALTER TABLE subscriptions
       ADD CONSTRAINT subscriptions_status_chk
-      CHECK (status IN ('pending_payment','active','payment_failed','canceled','expired'));
+      CHECK (status IN ('pending_payment','active','payment_failed','payment_overdue','canceled','expired'));
   END IF;
 END
 $$;
@@ -90,9 +90,22 @@ BEGIN
       FOR INSERT
       TO sub_creator
       WITH CHECK (
-        status = 'pending_payment'
-        AND expected_amount_minor >= 0
-        AND matched_event_id IS NULL
+        (
+          status = 'pending_payment'
+          AND expected_amount_minor >= 0
+          AND matched_event_id IS NULL
+        )
+        OR (
+          status = 'active'
+          AND expected_amount_minor = 0
+          AND matched_event_id IS NULL
+          AND EXISTS (
+            SELECT 1
+            FROM plans p
+            WHERE p.id = plan_id
+              AND p.code IN ('free','trial')
+          )
+        )
       )
     $sql$;
   ELSE
@@ -102,8 +115,20 @@ BEGIN
       FOR INSERT
       TO sub_creator
       WITH CHECK (
-        status = 'pending_payment'
-        AND expected_amount_minor >= 0
+        (
+          status = 'pending_payment'
+          AND expected_amount_minor >= 0
+        )
+        OR (
+          status = 'active'
+          AND expected_amount_minor = 0
+          AND EXISTS (
+            SELECT 1
+            FROM plans p
+            WHERE p.id = plan_id
+              AND p.code IN ('free','trial')
+          )
+        )
       )
     $sql$;
   END IF;
@@ -124,13 +149,21 @@ WITH CHECK (
   )
 );
 
+DROP POLICY IF EXISTS subs_creator_cancel_pending ON subscriptions;
+CREATE POLICY subs_creator_cancel_pending
+ON subscriptions
+FOR UPDATE
+TO sub_creator
+USING (status = 'pending_payment')
+WITH CHECK (status = 'canceled');
+
 DROP POLICY IF EXISTS subs_verifier_update_pending ON subscriptions;
 CREATE POLICY subs_verifier_update_pending
 ON subscriptions
 FOR UPDATE
 TO sub_verifier
 USING (status = 'pending_payment')
-WITH CHECK (status IN ('active','payment_failed','canceled','expired'));
+WITH CHECK (status IN ('active','payment_failed','payment_overdue','canceled','expired'));
 
 DROP POLICY IF EXISTS subs_reader_insert_all ON subscriptions;
 CREATE POLICY subs_reader_insert_all
@@ -165,3 +198,29 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE ON TABLES
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO sub_creator, sub_verifier, sub_reader;
 ALTER DEFAULT PRIVILEGES FOR ROLE :"db_owner" IN SCHEMA public GRANT SELECT, INSERT, UPDATE ON TABLES TO sub_creator, sub_verifier, sub_reader;
 ALTER DEFAULT PRIVILEGES FOR ROLE :"db_owner" IN SCHEMA public GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO sub_creator, sub_verifier, sub_reader;
+
+-- 5) Notify on subscription changes (access_sync listener)
+CREATE OR REPLACE FUNCTION subscriptions_notify_change()
+RETURNS trigger AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    PERFORM pg_notify(
+      'subscriptions_changed',
+      json_build_object('user_id', OLD.user_id)::text
+    );
+    RETURN OLD;
+  END IF;
+
+  PERFORM pg_notify(
+    'subscriptions_changed',
+    json_build_object('user_id', NEW.user_id)::text
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS subscriptions_notify_change ON subscriptions;
+CREATE TRIGGER subscriptions_notify_change
+AFTER INSERT OR UPDATE OR DELETE ON subscriptions
+FOR EACH ROW
+EXECUTE FUNCTION subscriptions_notify_change();

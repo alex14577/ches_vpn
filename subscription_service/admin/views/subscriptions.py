@@ -8,10 +8,10 @@ from datetime import datetime, timezone, timedelta
 from urllib.parse import quote
 import uuid
 
-from sqlalchemy import select, or_
+from sqlalchemy import select, or_, update
 
 from common.db import db_call
-from common.models import Subscription, User, Plan
+from common.models import Subscription, SubscriptionStatus, User, Plan
 
 def _parse_dt_local(s: str | None) -> datetime | None:
     if not s:
@@ -156,6 +156,7 @@ async def subscription_update(
     sub_id: uuid.UUID,
     valid_from: str = Form(...),
     valid_until: Optional[str] = Form(default=None),
+    status: str = Form(...),
 ):
     vf = _parse_dt_local(valid_from)
     vu = _parse_dt_local(valid_until) if (valid_until or "").strip() else None
@@ -163,19 +164,29 @@ async def subscription_update(
     if vf is None:
         return RedirectResponse(f"/admin/subscriptions/{sub_id}?err=" + quote("valid_from обязателен"), status_code=303)
 
+    allowed_statuses = {s.value for s in SubscriptionStatus}
+    if status not in allowed_statuses:
+        return RedirectResponse(f"/admin/subscriptions/{sub_id}?err=" + quote("Некорректный статус"), status_code=303)
+
     async def _upd(db) -> bool:
         res = await db._s.execute(select(Subscription).where(Subscription.id == sub_id))
         sub: Subscription = res.scalar_one_or_none()
         if sub is None:
             return False
-        
-        ok = await db_call(lambda db: db.subscriptions.update(
-            sub_id=sub.id,
-            valid_from=vf,
-            valid_until=vu
-            ))
-        
-        return ok
+
+        stmt = (
+            update(Subscription)
+            .where(Subscription.id == sub_id)
+            .values(
+                valid_from=vf,
+                valid_until=vu,
+                status=status,
+            )
+        )
+        res = await db._s.execute(stmt)
+        await db._s.flush()
+
+        return (res.rowcount or 0) > 0
 
     ok = await db_call(_upd)
     if not ok:
@@ -197,4 +208,4 @@ async def subscription_delete(sub_id: uuid.UUID):
     if not ok:
         return RedirectResponse("/admin/subscriptions?err=" + quote("Подписка не найдена"), status_code=303)
 
-    return RedirectResponse("/admin/subscriptions?ok=1", status_code=303)
+    return RedirectResponse("/admin/subscriptions?ok=deleted", status_code=303)

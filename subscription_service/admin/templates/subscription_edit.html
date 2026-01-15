@@ -10,7 +10,7 @@
     <div><strong>ID</strong></div><div>{{ subscription.id }}</div>
     <div><strong>User</strong></div><div>{{ user.username or user.tg_user_id }}</div>
     <div><strong>Plan</strong></div><div>{{ plan.code }}</div>
-    <div><strong>Status</strong></div><div>{{ subscription.status }}</div>
+    <div><strong>Status</strong></div><div>{{ subscription.status.value }}</div>
     <div><strong>Created</strong></div><div>{{ subscription.created_at }}</div>
   </div>
 </section>
@@ -26,6 +26,17 @@
     <label>Valid until (UTC)
       <input type="datetime-local" name="valid_until"
              value="{{ subscription.valid_until.strftime('%Y-%m-%dT%H:%M') if subscription.valid_until else '' }}" />
+    </label>
+
+    <label>Status
+      <select name="status" required>
+        {% set current = subscription.status.value %}
+        <option value="pending_payment" {% if current == 'pending_payment' %}selected{% endif %}>pending_payment</option>
+        <option value="active" {% if current == 'active' %}selected{% endif %}>active</option>
+        <option value="payment_failed" {% if current == 'payment_failed' %}selected{% endif %}>payment_failed</option>
+        <option value="canceled" {% if current == 'canceled' %}selected{% endif %}>canceled</option>
+        <option value="expired" {% if current == 'expired' %}selected{% endif %}>expired</option>
+      </select>
     </label>
 
     <div style="align-self:end">

@@ -20,6 +20,7 @@ from telegram.ext import (
 from common.db import db_call, init_db_engine
 from bot.reports import daily_report_task
 from common.logger import Logger, Level
+from common.models import User
 from common.xui_client.registry import Manager
 from bot.actions.handler import handler
 from bot.actions import main_menu
@@ -35,12 +36,13 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not tg_user or not update.message:
         return
 
-    await db_call(lambda db: db.users.getOrCreate(tg_user.id, tg_user.username, refer_id=source))
+    user: User = await db_call(lambda db: db.users.getOrCreate(tg_user.id, tg_user.username, refer_id=source))
     Logger.info("User start: tg_user_id=%s username=%s, source=\"%s\"", tg_user.id, tg_user.username, source or "")
     
+    text, reply_markup = await main_menu.build_main_view(tg_user_id, tg_user.username)
     await update.message.reply_text(
-        text=main_menu.text(),
-        reply_markup=main_menu.keyboard(tg_user_id),
+        text=text,
+        reply_markup=reply_markup,
         parse_mode="HTML",
     )
 

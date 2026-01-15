@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta, date
-from typing import Optional
+from typing import Optional, Iterable
 import uuid
 
 from sqlalchemy import BigInteger, Column, DateTime, String
@@ -40,6 +40,13 @@ class UsersAdapter:
         res = await self.s.execute(select(User).where(User.id == user_id))
         return res.scalar_one_or_none()        
 
+    async def by_ids(self, user_ids: Iterable[uuid.UUID]) -> list[User]:
+        ids = list(user_ids)
+        if not ids:
+            return []
+        res = await self.s.execute(select(User).where(User.id.in_(ids)))
+        return list(res.scalars().all())
+
     async def getOrCreate(self, tg_user_id: int, username: Optional[str] = None, refer_id: Optional[str] = None) -> User:
         u = await self.byTgId(tg_user_id)
         if u:
@@ -50,14 +57,15 @@ class UsersAdapter:
         await self.s.flush()
         return u
     
-    async def update(self, user: User):        
+    async def update(self, user: User) -> User:
         stmt = (
             sa_update(User)
-            .where(User == user)
+            .where(User.id == user.id)
             .values(username=user.username, refer_id=user.refer_id)
         )
         await self.s.execute(stmt)
-        self.s.flush()
+        await self.s.flush()
+        return user
 
     async def delete(self, user_id: uuid.UUID) -> bool:
         user = await self.get(user_id)
@@ -134,6 +142,7 @@ class SubscriptionAdapter:
     PENDING = "pending_payment"
     ACTIVE = "active"
     EXPIRED = "expired"
+    CANCELED = "canceled"
 
     def __init__(self, session: AsyncSession):
         self.s = session
@@ -219,6 +228,55 @@ class SubscriptionAdapter:
         res = await self.s.execute(stmt)
         return res.scalar_one_or_none()
 
+    async def active_for_user(self, user_id: uuid.UUID) -> Optional[Subscription]:
+        now = datetime.now(timezone.utc)
+        stmt = (
+            select(Subscription)
+            .where(
+                Subscription.user_id == user_id,
+                Subscription.status == self.ACTIVE,
+                Subscription.valid_from <= now,
+                or_(Subscription.valid_until.is_(None), Subscription.valid_until >= now),
+            )
+            .order_by(
+                Subscription.valid_until.desc().nullsfirst(),
+                Subscription.valid_from.desc(),
+                Subscription.created_at.desc(),
+            )
+            .limit(1)
+        )
+        res = await self.s.execute(stmt)
+        return res.scalar_one_or_none()
+
+    async def pending_free_or_trial_for_user(self, user_id: uuid.UUID) -> bool:
+        stmt = (
+            select(Subscription.id)
+            .join(Plan, Plan.id == Subscription.plan_id)
+            .where(
+                Subscription.user_id == user_id,
+                Subscription.status == self.PENDING,
+                Plan.code.in_(["free", "trial"]),
+            )
+            .limit(1)
+        )
+        res = await self.s.execute(stmt)
+        return res.scalar_one_or_none() is not None
+
+    async def has_active(self, user_id: uuid.UUID) -> bool:
+        now = datetime.now(timezone.utc)
+        stmt = (
+            select(Subscription.id)
+            .where(
+                Subscription.user_id == user_id,
+                Subscription.status == self.ACTIVE,
+                Subscription.valid_from <= now,
+                or_(Subscription.valid_until.is_(None), Subscription.valid_until >= now),
+            )
+            .limit(1)
+        )
+        res = await self.s.execute(stmt)
+        return res.scalar_one_or_none() is not None
+
     async def add_by_plan_code(
         self,
         *,
@@ -259,6 +317,10 @@ class PlanAdapter:
     def __init__(self, session: AsyncSession):
         self.s = session
         
+    async def get(self, plan_id: uuid.UUID) -> Plan | None:
+        res = await self.s.execute(select(Plan).where(Plan.id == plan_id))
+        return res.scalar_one_or_none()
+
     async def getByCode(self, code: str) -> Plan:
         res = await self.s.execute(select(Plan).where(Plan.code == code))
         return res.scalar_one_or_none()

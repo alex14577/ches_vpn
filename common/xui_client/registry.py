@@ -263,10 +263,15 @@ class Manager:
 
     async def del_user(self, user: User) -> None:
         """Удалить пользователя со всех серверов."""
+        display_name = user.username or str(user.tg_user_id)
+        await self.del_user_id(user.id, display_name=display_name)
+
+    async def del_user_id(self, user_id: uuid.UUID, display_name: str | None = None) -> None:
+        """Удалить пользователя по id со всех серверов."""
         await self._ensure_synced()
 
-        user_id = str(user.id)
-        display_name = user.username or str(user.tg_user_id)
+        user_id_str = str(user_id)
+        display_name = display_name or user_id_str
 
         async def del_one(mc: ManagedClient) -> None:
             async with self._io_sem:
@@ -274,8 +279,8 @@ class Manager:
                 inbounds = await client.inbounds()
 
                 for inbound in inbounds:
-                    if any(c.id == user_id for c in inbound.settings.clients):
-                        await client.delClient(inbound.id, user_id)
+                    if any(c.id == user_id_str for c in inbound.settings.clients):
+                        await client.delClient(inbound.id, user_id_str)
 
                 Logger.info('User "%s" removed from server "%s"', display_name, client.cfg.api_base_url)
 
@@ -283,6 +288,30 @@ class Manager:
         for r in results:
             if isinstance(r, Exception):
                 Logger.warning("del_user partial failure: %s", r)
+
+    async def list_user_ids(self) -> set[uuid.UUID]:
+        """Собрать список user_id, которые сейчас есть на серверах."""
+        await self._ensure_synced()
+
+        async def collect_one(mc: ManagedClient):
+            async with self._io_sem:
+                return await mc.client.inbounds()
+
+        results = await asyncio.gather(*(collect_one(mc) for mc in self._clients.values()), return_exceptions=True)
+
+        user_ids: set[uuid.UUID] = set()
+        for r in results:
+            if isinstance(r, Exception):
+                Logger.warning("list_user_ids partial failure: %s", r)
+                continue
+            for inbound in r:
+                for cs in inbound.settings.clients:
+                    try:
+                        user_ids.add(uuid.UUID(str(cs.id)))
+                    except Exception:
+                        continue
+
+        return user_ids
 
     @staticmethod
     def _client_total_bytes(cs) -> int:

@@ -12,7 +12,6 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
-    Text,
     func
 )
 
@@ -74,7 +73,6 @@ class Plan(SQLModel, table=True):
 
     code: str = Field(sa_column=Column(String(32), unique=True, nullable=False, index=True))
     title: str = Field(sa_column=Column(String(128), nullable=False))
-    description: str = Field(sa_column=Column(Text, nullable=False))
 
     price_rub: int = Field(sa_column=Column(Integer, nullable=False))
     duration_days: Optional[int] = Field(default=None, sa_column=Column(Integer, nullable=True))
@@ -101,6 +99,7 @@ class SubscriptionStatus(str, enum.Enum):
     pending_payment = "pending_payment"
     active = "active"
     payment_failed = "payment_failed"
+    payment_overdue = "payment_overdue"
     canceled = "canceled"
     expired = "expired"
 

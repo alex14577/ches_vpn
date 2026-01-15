@@ -41,14 +41,12 @@ async def plans_page(request: Request, q: Optional[str] = None) -> HTMLResponse:
 async def plan_create(
     code: str = Form(...),
     title: str = Form(...),
-    description: str = Form(...),
     price_rub: int = Form(...),
     duration_days: Optional[str] = Form(default=None),  # из формы приходит строка
     is_active: Optional[str] = Form(default=None),      # checkbox -> "on" или None
 ):
     code = code.strip()
     title = title.strip()
-    description = description.strip()
 
     dd = (duration_days or "").strip()
     duration_val = int(dd) if dd else None
@@ -57,7 +55,6 @@ async def plan_create(
     plan = Plan(
         code=code,
         title=title,
-        description=description,
         price_rub=int(price_rub),
         duration_days=duration_val,
         is_active=active_val,
@@ -91,13 +88,11 @@ async def plan_edit_page(request: Request, plan_id: uuid.UUID) -> HTMLResponse:
 async def plan_update(
     plan_id: uuid.UUID,
     title: str = Form(...),
-    description: str = Form(...),
     price_rub: int = Form(...),
     duration_days: Optional[str] = Form(default=None),
     is_active: Optional[str] = Form(default=None),
 ):
     title = title.strip()
-    description = description.strip()
 
     dd = (duration_days or "").strip()
     duration_val = int(dd) if dd else None
@@ -109,7 +104,6 @@ async def plan_update(
             .where(Plan.id == plan_id)
             .values(
                 title=title,
-                description=description,
                 price_rub=int(price_rub),
                 duration_days=duration_val,
                 is_active=active_val,

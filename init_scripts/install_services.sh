@@ -12,6 +12,8 @@ ADMIN_CREDENTIALS_FILE="/var/lib/ches_vpn"
 SERVICES=(
   vpn-bot.service
   vpn-subscription.service
+  vpn-pay_verifier.service
+  vpn-access-sync.service
 )
 
 # --- helpers ---
@@ -137,12 +139,20 @@ read_and_export_env() {
   : "${VPN_SUBSCRIPTION_DB_PASSWORD:=1234}"
   : "${VPN_BOT_DB_USERNAME:=bot}"
   : "${VPN_BOT_DB_PASSWORD:=1234}"
-  : "${VPN_WORKER_DB_USERNAME:=woker}"
-  : "${VPN_WORKER_DB_PASSWORD:=1234}"
+  : "${VPN_PAY_VERIFIER_DB_USERNAME:=pay_verifier}"
+  : "${VPN_PAY_VERIFIER_DB_PASSWORD:=1234}"
   : "${DB_NAME:=app}"
+  : "${PUBLIC_BASE_URL:=https://ches-server.mooo.com}"
 
   if [[ -z "${TG_BOT_TOKEN:-}" ]]; then
-    read -rp "Telegram bot token: " TG_BOT_TOKEN
+    TG_BOT_TOKEN="$(prompt_secret TG_BOT_TOKEN)"
+  fi
+
+  if [[ -z "${VK_TOKEN:-}" ]]; then
+    VK_TOKEN="$(prompt_secret VK_TOKEN)"
+  fi
+  if [[ -z "${VK_PEER_ID:-}" ]]; then
+    VK_PEER_ID="$(prompt_value VK_PEER_ID)"
   fi
 
   if [[ -z "${VPN_SUBSCRIPTION_DB_USERNAME:-}" ]]; then
@@ -159,11 +169,11 @@ read_and_export_env() {
     VPN_BOT_DB_PASSWORD="$(prompt_secret VPN_BOT_DB_PASSWORD)"
   fi
 
-  if [[ -z "${VPN_WORKER_DB_USERNAME:-}" ]]; then
-    read -rp "VPN_WORKER_DB_USERNAME: " VPN_WORKER_DB_USERNAME
+  if [[ -z "${VPN_PAY_VERIFIER_DB_USERNAME:-}" ]]; then
+    read -rp "VPN_PAY_VERIFIER_DB_USERNAME: " VPN_PAY_VERIFIER_DB_USERNAME
   fi
-  if [[ -z "${VPN_WORKER_DB_PASSWORD:-}" ]]; then
-    VPN_WORKER_DB_PASSWORD="$(prompt_secret VPN_WORKER_DB_PASSWORD)"
+  if [[ -z "${VPN_PAY_VERIFIER_DB_PASSWORD:-}" ]]; then
+    VPN_PAY_VERIFIER_DB_PASSWORD="$(prompt_secret VPN_PAY_VERIFIER_DB_PASSWORD)"
   fi
 
   if [[ -z "${DB_NAME:-}" ]]; then
@@ -171,12 +181,15 @@ read_and_export_env() {
   fi
 
   export TG_BOT_TOKEN
+  export VK_TOKEN
+  export VK_PEER_ID
+  export PUBLIC_BASE_URL
   export VPN_SUBSCRIPTION_DB_USERNAME
   export VPN_SUBSCRIPTION_DB_PASSWORD
   export VPN_BOT_DB_USERNAME
   export VPN_BOT_DB_PASSWORD
-  export VPN_WORKER_DB_USERNAME
-  export VPN_WORKER_DB_PASSWORD
+  export VPN_PAY_VERIFIER_DB_USERNAME
+  export VPN_PAY_VERIFIER_DB_PASSWORD
   export DB_NAME
   
   : "${DB_HOST:=127.0.0.1}"
@@ -200,11 +213,23 @@ write_env_file() {
     if ! grep -q "^VPN_BOT_DB_PASSWORD=" "$ENV_FILE"; then
       echo "VPN_BOT_DB_PASSWORD=$VPN_BOT_DB_PASSWORD" >>"$ENV_FILE"
     fi
-    if ! grep -q "^VPN_WORKER_DB_USERNAME=" "$ENV_FILE"; then
-      echo "VPN_WORKER_DB_USERNAME=$VPN_WORKER_DB_USERNAME" >>"$ENV_FILE"
+    if ! grep -q "^VPN_PAY_VERIFIER_DB_USERNAME=" "$ENV_FILE"; then
+      echo "VPN_PAY_VERIFIER_DB_USERNAME=$VPN_PAY_VERIFIER_DB_USERNAME" >>"$ENV_FILE"
     fi
-    if ! grep -q "^VPN_WORKER_DB_PASSWORD=" "$ENV_FILE"; then
-      echo "VPN_WORKER_DB_PASSWORD=$VPN_WORKER_DB_PASSWORD" >>"$ENV_FILE"
+    if ! grep -q "^VPN_PAY_VERIFIER_DB_PASSWORD=" "$ENV_FILE"; then
+      echo "VPN_PAY_VERIFIER_DB_PASSWORD=$VPN_PAY_VERIFIER_DB_PASSWORD" >>"$ENV_FILE"
+    fi
+    if ! grep -q "^TG_BOT_TOKEN=" "$ENV_FILE"; then
+      echo "TG_BOT_TOKEN=$TG_BOT_TOKEN" >>"$ENV_FILE"
+    fi
+    if ! grep -q "^VK_TOKEN=" "$ENV_FILE"; then
+      echo "VK_TOKEN=$VK_TOKEN" >>"$ENV_FILE"
+    fi
+    if ! grep -q "^VK_PEER_ID=" "$ENV_FILE"; then
+      echo "VK_PEER_ID=$VK_PEER_ID" >>"$ENV_FILE"
+    fi
+    if ! grep -q "^PUBLIC_BASE_URL=" "$ENV_FILE"; then
+      echo "PUBLIC_BASE_URL=$PUBLIC_BASE_URL" >>"$ENV_FILE"
     fi
     return
   fi
@@ -215,12 +240,15 @@ write_env_file() {
 
   cat >"$ENV_FILE" <<EOF
 TG_BOT_TOKEN=$TG_BOT_TOKEN
+VK_TOKEN=$VK_TOKEN
+VK_PEER_ID=$VK_PEER_ID
+PUBLIC_BASE_URL=$PUBLIC_BASE_URL
 VPN_SUBSCRIPTION_DB_USERNAME=$VPN_SUBSCRIPTION_DB_USERNAME
 VPN_SUBSCRIPTION_DB_PASSWORD=$VPN_SUBSCRIPTION_DB_PASSWORD
 VPN_BOT_DB_USERNAME=$VPN_BOT_DB_USERNAME
 VPN_BOT_DB_PASSWORD=$VPN_BOT_DB_PASSWORD
-VPN_WORKER_DB_USERNAME=$VPN_WORKER_DB_USERNAME
-VPN_WORKER_DB_PASSWORD=$VPN_WORKER_DB_PASSWORD
+VPN_PAY_VERIFIER_DB_USERNAME=$VPN_PAY_VERIFIER_DB_USERNAME
+VPN_PAY_VERIFIER_DB_PASSWORD=$VPN_PAY_VERIFIER_DB_PASSWORD
 DB_NAME=$DB_NAME
 DB_HOST=$DB_HOST
 DB_PORT=$DB_PORT
@@ -321,8 +349,8 @@ run_init_sql() {
   sudo -u postgres psql -v ON_ERROR_STOP=1 \
     -v vpn_bot_username="$VPN_BOT_DB_USERNAME" \
     -v vpn_bot_password="$VPN_BOT_DB_PASSWORD" \
-    -v vpn_worker_username="$VPN_WORKER_DB_USERNAME" \
-    -v vpn_worker_password="$VPN_WORKER_DB_PASSWORD" \
+    -v vpn_pay_verifier_username="$VPN_PAY_VERIFIER_DB_USERNAME" \
+    -v vpn_pay_verifier_password="$VPN_PAY_VERIFIER_DB_PASSWORD" \
     -v vpn_subscription_username="$VPN_SUBSCRIPTION_DB_USERNAME" \
     -v vpn_subscription_password="$VPN_SUBSCRIPTION_DB_PASSWORD" \
     -d "$db_name" -f "$users_sql"

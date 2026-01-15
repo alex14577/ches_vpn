@@ -3,14 +3,14 @@ from telegram import (
     CallbackQuery,
     Update,
 )
+from telegram.error import BadRequest
 from telegram.ext import (
     ContextTypes,
 )
 
 from bot.helpers import helpers
-from bot.actions import settings 
-from bot.actions import try_free, main_menu, instructions, say_thanks, return_main_menu
-from common.xui_client.registry import Manager
+from bot.actions import settings
+from bot.actions import choose_plan, main_menu, return_main_menu
 from common.logger import Logger
 
 from telegram.constants import ParseMode
@@ -18,17 +18,35 @@ from telegram.constants import ParseMode
 HTML = ParseMode.HTML
 
 
-async def _render_main_menu(query: CallbackQuery, tg_user_id) -> None:
+async def _render_main_menu(query: CallbackQuery, tg_user_id, username: str | None) -> None:
+    text, reply_markup = await main_menu.build_main_view(tg_user_id, username)
+    if query.message and (
+        query.message.photo
+        or query.message.document
+        or query.message.video
+        or query.message.animation
+    ):
+        await query.message.reply_text(
+            text=text,
+            reply_markup=reply_markup,
+            parse_mode=HTML,
+        )
+        try:
+            await query.message.delete()
+        except BadRequest:
+            pass
+        return
+
     await helpers.safe_edit(
         query,
-        text=main_menu.text(),
-        reply_markup=main_menu.keyboard(tg_user_id),
+        text=text,
+        reply_markup=reply_markup,
         parse_mode=HTML,
     )
 
 
 async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
+    query: CallbackQuery | None = update.callback_query
     if query is None or query.from_user is None:
         return
 
@@ -38,48 +56,44 @@ async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     tg_user_id = query.from_user.id
     username = query.from_user.username
-    servers_manager: Manager = context.bot_data["servers_manager"]
-
     match action:
-        case "instruction":
-            await helpers.safe_edit(
-                query,
-                text=instructions.text(),
-                reply_markup=return_main_menu.keyboard(),
-                parse_mode=HTML,
-            )
+        case "choose_plan":
+            await choose_plan.show_plans(query, context)
             return
 
-        case "say_thanks":
-            await helpers.safe_edit(
-                query,
-                text=say_thanks.text(),
-                reply_markup=return_main_menu.keyboard(),
-                parse_mode=HTML,
-            )
+        case _ if action.startswith("plan:"):
+            plan_code = action.split(":", 1)[1]
+            await choose_plan.show_plan_details(query, context, tg_user_id, username, plan_code)
             return
 
-        case "try_free":
-            sub_url = await try_free.try_free(
-                tg_user_id, username, servers_manager
-            )
-            text = (
-                "📋 <b>Ваша ссылка для подписки</b>\n\n"
-                f"<code>{sub_url}</code>\n\n"
-                "Нажмите на строку, чтобы скопировать ссылку."
-            )
-
-            await helpers.safe_edit(
-                query,
-                text=text,
-                reply_markup=return_main_menu.keyboard(),
-                parse_mode=HTML,
-                disable_web_page_preview=True,
-            )
+        case _ if action.startswith("payment_sent:"):
+            sub_id = action.split(":", 1)[1]
+            await choose_plan.notify_payment_sent(query, context, sub_id)
             return
 
         case "back_to_main":
-            await _render_main_menu(query, tg_user_id)
+            await _render_main_menu(query, tg_user_id, username)
+            return
+
+        case "connect_other_device":
+            await main_menu.render_other_device(query, tg_user_id, username)
+            return
+
+        case "copy_connect_link":
+            link_text, _ = await main_menu.build_other_device_view(tg_user_id, username)
+            if query.message:
+                await query.message.reply_text(
+                    text=link_text,
+                    disable_web_page_preview=True,
+                )
+            return
+
+        case "refresh_main_menu":
+            await _render_main_menu(query, tg_user_id, username)
+            return
+
+        case "faq_main_menu":
+            await main_menu.render_faq(query, tg_user_id, username)
             return
         
         case "admin_broadcast":
@@ -103,5 +117,5 @@ async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
         case _:
-            await _render_main_menu(query, tg_user_id)
+            await _render_main_menu(query, tg_user_id, username)
             return

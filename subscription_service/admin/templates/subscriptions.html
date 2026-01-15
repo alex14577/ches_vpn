@@ -3,7 +3,8 @@
 <h1>Subscriptions</h1>
 
 {% if err %}<p class="err">{{ err }}</p>{% endif %}
-{% if ok %}<p>✅ Подписка добавлена</p>{% endif %}
+{% if ok == "deleted" %}<p>✅ Подписка удалена</p>{% endif %}
+{% if ok and ok != "deleted" %}<p>✅ Подписка добавлена</p>{% endif %}
 
 <section class="card">
   <h2>Add subscription</h2>
@@ -66,7 +67,7 @@
         <tr>
           <td>{{ r.user.username or r.user.tg_user_id }}</td>
           <td>{{ r.plan.code }}</td>
-          <td>{{ r.subscription.status }}</td>
+          <td>{{ r.subscription.status.value }}</td>
           <td>{{ r.subscription.valid_from }}</td>
           <td>{{ r.subscription.valid_until or '—' }}</td>
           <td>{{ r.subscription.created_at }}</td>

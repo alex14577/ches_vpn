@@ -61,17 +61,28 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     async def send(uid: int):
         nonlocal ok, fail
         async with sem:
-            try:
-                await context.bot.send_message(uid, text)
-                async with lock:
-                    ok += 1
-            except RetryAfter as e:
-                await asyncio.sleep(e.retry_after + 1)
-            except Exception as e:
-                Logger.error("Error while sending broadcast message to \"%s\": \"%s\"", uid, e)
-                async with lock:
-                    fail += 1
-            await asyncio.sleep(0.03)  # анти-флуд
+            retries = 0
+            while True:
+                try:
+                    await context.bot.send_message(uid, text)
+                    async with lock:
+                        ok += 1
+                    break
+                except RetryAfter as e:
+                    retries += 1
+                    if retries >= 3:
+                        async with lock:
+                            fail += 1
+                        break
+                    await asyncio.sleep(e.retry_after + 1)
+                    continue
+                except Exception as e:
+                    Logger.error("Error while sending broadcast message to \"%s\": \"%s\"", uid, e)
+                    async with lock:
+                        fail += 1
+                    break
+                finally:
+                    await asyncio.sleep(0.03)  # анти-флуд
 
     tasks = [asyncio.create_task(send(uid)) for uid in user_ids]
     await asyncio.gather(*tasks)
