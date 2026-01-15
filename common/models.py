@@ -43,6 +43,11 @@ class User(SQLModel, table=True):
     subscription_token: str = Field(
         sa_column=Column(UUID(as_uuid=False), server_default=func.gen_random_uuid()))
 
+    used_trial: bool = Field(
+        default=False,
+        sa_column=Column(Boolean, nullable=False, server_default="false"),
+    )
+
     created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), 
                          server_default=func.now(), 

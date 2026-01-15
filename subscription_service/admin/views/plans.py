@@ -9,6 +9,7 @@ from fastapi import APIRouter, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select, update, delete, or_
+from sqlalchemy.exc import IntegrityError
 
 from common.db import db_call
 from common.models import Plan
@@ -61,10 +62,19 @@ async def plan_create(
     )
 
     async def _create(db):
+        exists_stmt = select(Plan.id).where(Plan.code.ilike(code)).limit(1)
+        res = await db._s.execute(exists_stmt)
+        if res.scalar_one_or_none() is not None:
+            raise ValueError("План с таким кодом уже существует.")
         db._s.add(plan)
         await db._s.flush()
 
-    await db_call(_create)
+    try:
+        await db_call(_create)
+    except ValueError as exc:
+        return RedirectResponse(url=f"/admin/plans?err={exc}", status_code=303)
+    except IntegrityError:
+        return RedirectResponse(url="/admin/plans?err=План с таким кодом уже существует.", status_code=303)
     return RedirectResponse(url="/admin/plans", status_code=303)
 
 

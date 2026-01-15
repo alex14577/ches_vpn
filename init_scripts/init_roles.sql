@@ -23,6 +23,9 @@ $$;
 -- ВНИМАНИЕ: IF NOT EXISTS для ADD COLUMN есть, для CONSTRAINT — нет во всех версиях одинаково,
 -- поэтому constraint проверяем через pg_constraint.
 
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS used_trial BOOLEAN NOT NULL DEFAULT FALSE;
+
 ALTER TABLE subscriptions
   ADD COLUMN IF NOT EXISTS expected_amount_minor INTEGER NOT NULL DEFAULT 0;
 

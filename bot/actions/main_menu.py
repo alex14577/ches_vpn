@@ -38,12 +38,14 @@ def _days_left(valid_until: datetime | None) -> str:
 
 async def _ensure_trial_subscription(user: User) -> None:
     async def _load(db) -> None:
+        db_user = await db.users.get(user.id)
+        if db_user is None:
+            return
         active_sub = await db.subscriptions.active_for_user(user.id)
         if active_sub is not None:
             return
 
-        last_sub = await db.subscriptions.last_for_user(user.id)
-        if last_sub is not None:
+        if db_user.used_trial:
             return
 
         trial_plan = await db.plans.getByCode("trial")
@@ -63,6 +65,8 @@ async def _ensure_trial_subscription(user: User) -> None:
             expected_amount_minor=0,
             status="pending_payment",
         )
+        db_user.used_trial = True
+        await db._s.flush()
 
     await db_call(_load)
 
