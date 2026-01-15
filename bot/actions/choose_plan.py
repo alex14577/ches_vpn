@@ -164,7 +164,7 @@ async def show_plan_details(
     text = (
         f"<b>{plan_for_sub.title}</b>\n\n"
         f"Сумма к оплате: <b>{amount_str} ₽</b>\n"
-        f"Переведите по СБП на номер: <b>{settings.SBP_PHONE} ровно эту сумму</b>\n\n"
+        f"Переведите по СБП на номер: <b>{settings.SBP_PHONE} ровно эту сумму</b> на <b>Альфа банк</b>\n\n"
         "После оплаты нажмите кнопку ниже."
     )
     await helpers.safe_edit(
