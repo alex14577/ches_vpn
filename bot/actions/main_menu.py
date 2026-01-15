@@ -11,6 +11,7 @@ from bot.actions.settings import PUBLIC_BASE_URL
 from bot.helpers import helpers
 from common.db import db_call
 from common.models import Plan, Subscription, User
+from sqlalchemy import select
 
 HTML = ParseMode.HTML
 
@@ -84,6 +85,31 @@ async def _get_active_subscription(
     return await db_call(_load)
 
 
+async def _get_pending_trial_subscription(
+    user: User,
+) -> tuple[Subscription | None, Plan | None]:
+    async def _load(db):
+        stmt = (
+            select(Subscription, Plan)
+            .join(Plan, Plan.id == Subscription.plan_id)
+            .where(
+                Subscription.user_id == user.id,
+                Subscription.status == "pending_payment",
+                Plan.code == "trial",
+            )
+            .order_by(Subscription.created_at.desc())
+            .limit(1)
+        )
+        res = await db._s.execute(stmt)
+        row = res.first()
+        if row is None:
+            return None, None
+        sub, plan = row
+        return sub, plan
+
+    return await db_call(_load)
+
+
 async def _get_available_plans() -> list[Plan]:
     plans = await db_call(lambda db: db.plans.active())
     return [p for p in plans if p.code not in {"free", "trial"}]
@@ -96,6 +122,11 @@ async def build_main_view(
     user = await _get_user(tg_user_id, username)
     await _ensure_trial_subscription(user)
     active_sub, active_plan = await _get_active_subscription(user)
+    if active_sub is None:
+        pending_trial, pending_plan = await _get_pending_trial_subscription(user)
+        if pending_trial is not None:
+            active_sub = pending_trial
+            active_plan = pending_plan
     if active_sub is None:
         plans = await _get_available_plans()
         text = (
