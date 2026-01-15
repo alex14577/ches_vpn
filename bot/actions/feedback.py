@@ -18,11 +18,11 @@ USER_TAG_RE = re.compile(r"\[#u(\d+)\]")
 USER_HEADER_RE = re.compile(r"\[#u(\d+)\](?:\s+@([A-Za-z0-9_]{1,32}))?")
 
 
-def _get_admin_id() -> int | None:
+def _get_admin_ids() -> list[int]:
     admin_ids = settings.ADMIN_TG_ID
     if isinstance(admin_ids, list):
-        return admin_ids[0] if admin_ids else None
-    return admin_ids
+        return [int(admin_id) for admin_id in admin_ids]
+    return [int(admin_ids)]
 
 
 def _user_header(user_id: int, username: str | None) -> str:
@@ -74,12 +74,10 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     await query.answer()
 
-    admin_id = _get_admin_id()
-    if admin_id is None:
-        return
+    admin_ids = _get_admin_ids()
 
     if data.startswith(ADMIN_REPLY_CALLBACK_PREFIX):
-        if query.from_user.id != admin_id:
+        if query.from_user.id not in admin_ids:
             return
 
         user_id_str = data[len(ADMIN_REPLY_CALLBACK_PREFIX):]
@@ -100,7 +98,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             "Напишите сообщение ответом на это сообщение."
         )
         await context.bot.send_message(
-            chat_id=admin_id,
+            chat_id=query.from_user.id,
             text=text,
             reply_markup=ForceReply(selective=True),
         )
@@ -257,12 +255,13 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if message.from_user.is_bot:
         return
 
-    admin_id = _get_admin_id()
-    if admin_id is None:
+    admin_ids = _get_admin_ids()
+    if not admin_ids:
         return
 
-    if message.from_user.id == admin_id:
-        await _handle_admin_reply(message, context, admin_id)
+    if message.from_user.id in admin_ids:
+        await _handle_admin_reply(message, context, message.from_user.id)
         return
 
-    await _handle_user_message(message, context, admin_id)
+    for admin_id in admin_ids:
+        await _handle_user_message(message, context, admin_id)
