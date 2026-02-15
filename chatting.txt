@@ -1,0 +1,687 @@
+Ревью проекта по запросу: уведомления, оплата, продление, расчёт дней, бесшовный переход.
+
+Ниже только найденные проблемы (с приоритетом), с ссылками на код и последствиями.
+
+1) КРИТИЧНО: срок подписки начинается в момент создания счета, а не в момент подтверждения оплаты.
+Файл: `bot/actions/choose_plan.py:136`, `bot/actions/choose_plan.py:139`, `pay_verifier/service.py:147`
+Что происходит:
+- При создании pending-подписки сразу ставятся `valid_from=now` и `valid_until=now+duration`.
+- При подтверждении платежа меняется только `status -> active`, даты не пересчитываются.
+Последствие:
+- Пользователь теряет оплаченные часы/дни, если оплатил не сразу.
+- Это особенно заметно на месячном тарифе при оплате через несколько часов/дней.
+
+Ответ админа:
+Так задумано. На оалвту даётся 15 мин. -> Не критично. 15 мин в месяц - не много. Тариф становится активным только после оплаты.
+
+2) КРИТИЧНО: пользователь не может продлить активную подписку заранее (невозможен сценарий "оплачено 2 раза по месяцу").
+Файл: `bot/actions/choose_plan.py:89`, `bot/actions/choose_plan.py:94`
+Что происходит:
+- Если есть активная подписка, вход в оплату блокируется и показывается главное меню.
+Последствие:
+- Нельзя купить второй месяц заранее.
+- Нет бесшовного продления через предоплату.
+
+Ответ админа:
+Нужно сделать, чтобы можно было продлить, когда активна подписка.
+
+
+3) КРИТИЧНО: отложенные подписки не активируются автоматически по времени.
+Файл: `common/adapters.py:151`, `common/adapters.py:154`, `subscription_service/admin/views/subscriptions.py:122`, `common/adapters.py:231`
+Что происходит:
+- Для подписок с `valid_from > now` статус вычисляется как `pending_payment`.
+- Автоматического перевода `pending_payment -> active` при наступлении `valid_from` нет.
+- `active_for_user` учитывает только `status == active`.
+Последствие:
+- "Подписка на будущее" (для бесшовного перехода) может зависнуть в pending и не включиться.
+
+Ответ админа:
+Нужно исправить.
+
+
+4) КРИТИЧНО: просрочка pending через 15 минут ломает позднее подтверждение оплаты.
+Файл: `pay_verifier/service.py:181`, `pay_verifier/service.py:188`, `pay_verifier/service.py:85`
+Что происходит:
+- Через 15 минут pending-платеж переводится в `payment_overdue`.
+- Матчинг платежей ищет только `status == pending_payment`.
+Последствие:
+- Если пользователь оплатил позже 15 минут, подписка автоматически уже не активируется.
+- Нужна ручная правка в админке.
+
+Ответ админа:
+Всё правильно. После 15 минут стоит пользователю сообщить, что платеж просрочен. И запустить процесс оплаты зщаново. Эту подписку пометить просрочным платежом
+
+5) КРИТИЧНО: высокий риск повторного зачёта старых платежных сообщений после рестарта verifier.
+Файл: `pay_verifier/service.py:32`, `pay_verifier/service.py:202`, `pay_verifier/service.py:65`, `pay_verifier/sources.py:31`
+Что происходит:
+- Дедупликация сообщений только в RAM (`_seen_ids`), после рестарта память пустая.
+- История VK перечитывается в окне `vk_lookback`.
+- В БД `PaymentEvent` пишется, но не используется для идемпотентности/уникальности.
+Последствие:
+- После рестарта старое сообщение может снова сматчиться с новым pending того же amount.
+- Возможны ложные активации.
+
+Ответ админа:
+Подумать, как исправить.
+
+
+6) КРИТИЧНО: `last_for_user` не фильтрует статусы и может ломать логику продления.
+Файл: `common/adapters.py:217`, `common/adapters.py:222`, `subscription_service/admin/views/subscriptions.py:108`
+Что происходит:
+- "Последняя подписка" выбирается по датам без учёта статуса.
+- В расчёт старта новой попадают `canceled/payment_overdue/payment_failed` с будущим `valid_until`.
+Последствие:
+- Новый период может стартовать необоснованно в будущем.
+- Появляются дырки или сдвиги доступа во времени.
+
+Ответ админа:
+Исравить
+
+7) ВАЖНО: вывод "Осталось X дн." не учитывает оплаченные будущие периоды.
+Файл: `bot/actions/main_menu.py:147`, `common/adapters.py:231`
+Что происходит:
+- Показывается только `valid_until` текущей активной подписки.
+- Следующие периоды (если уже оплачены/созданы) не суммируются в остаток.
+Последствие:
+- При модели "оплатил 2 раза по месяцу" UI будет показывать только первый месяц.
+- Пользователь видит меньше дней, чем фактически оплачено.
+
+Ответ админа:
+Исправить
+
+8) ВАЖНО: уведомление "Я оплатил" не проверяет владельца subscription_id.
+Файл: `bot/actions/choose_plan.py:181`, `bot/actions/choose_plan.py:195`
+Что происходит:
+- Обработчик принимает `subscription_id` из callback и отправляет админам информацию, не проверяя, что подписка принадлежит `query.from_user`.
+Последствие:
+- Можно отправлять админам шум/чужие id (логический баг валидации бизнес-действия).
+
+Ответ админа:
+Исправить
+
+9) ВАЖНО: отсутствуют пользовательские уведомления о ключевых состояниях оплаты/подписки.
+Файл: `pay_verifier/service.py` (весь поток), `bot/actions/main_menu.py`
+Что происходит:
+- При `active/payment_overdue/expired` нет push-сообщений пользователю.
+- Пользователь узнаёт статус только если сам нажмёт "Обновить".
+Последствие:
+- Потеря прозрачности и рост обращений в поддержку.
+
+Ответ админа:
+Исправить. Добавить уведомления о скором конце подписки.
+
+
+10) ВАЖНО: риск ошибки часового пояса в админке при ручном редактировании дат.
+Файл: `subscription_service/admin/views/subscriptions.py:14`, `subscription_service/admin/views/subscriptions.py:18`
+Что происходит:
+- `datetime-local` из браузера трактуется как UTC без конвертации.
+Последствие:
+- Если админ не в UTC, `valid_from/valid_until` сохраняются со сдвигом.
+- Это напрямую влияет на "бесшовность" по времени.
+
+Ответ админа:
+Исправить
+
+11) ВАЖНО: trial показывается как рабочий доступ ещё в `pending_payment`.
+Файл: `bot/actions/main_menu.py:125`, `bot/actions/main_menu.py:127`, `access_sync/service.py:83`
+Что происходит:
+- В UI trial в pending подставляется как текущая подписка.
+- В access_sync pending free/trial тоже синкается как активный доступ.
+Последствие:
+- Поведение неочевидное: статус "pending_payment", но доступ фактически уже выдан.
+- Это не фатально, но статусная модель становится противоречивой.
+
+Ответ админа:
+
+
+===============================================================================
+НОВЫЕ БАГИ (найдены при повторном глубоком ревью)
+===============================================================================
+
+12) КРИТИЧНО: PaymentEvent НЕ ЛИНКУЕТСЯ к Subscription — matched_event_id никогда не заполняется.
+Файлы: `pay_verifier/service.py:128-145`, `pay_verifier/service.py:147-161`, `common/models.py:149`
+- _record_event() и _activate_subscription() — РАЗНЫЕ транзакции (разные db_call).
+- Subscription.matched_event_id (FK) НИКОГДА не ставится.
+- Если _record_event() ок, а _activate_subscription() упадёт — дубль PaymentEvent.
+Как чинить: одна транзакция + записать matched_event_id.
+Ответ админа:
+Исправить
+
+13) КРИТИЧНО: Race condition — 2 юзера могут получить одинаковую сумму оплаты.
+Файлы: `bot/actions/choose_plan.py:44-63`, `bot/actions/choose_plan.py:104-148`
+- _find_free_amount() — отдельный db_call внутри work() — 2 разных сессии.
+- Между поиском и созданием подписки сумму может занять другой юзер.
+Как чинить: одна транзакция или UNIQUE partial index на expected_amount_minor WHERE status='pending_payment'.
+Ответ админа:
+Исправить
+
+14) ВАЖНО: daily_report_task вызывает НЕСУЩЕСТВУЮЩИЙ метод — крашится МОЛЧА КАЖДЫЙ ДЕНЬ.
+Файлы: `bot/reports.py:28`, `common/adapters.py`
+- Метод db.users.new_users_last_24h() НЕ СУЩЕСТВУЕТ в UsersAdapter. AttributeError.
+- except Exception глотает ошибку. Отчёты не работали НИКОГДА.
+Как чинить: добавить метод new_users_last_24h() в UsersAdapter.
+Ответ админа:
+Исправить
+
+15) ВАЖНО: daily_report_task — ВТОРОЙ баг: передаёт list как chat_id -> TypeError.
+Файлы: `bot/main.py:67`, `bot/reports.py:42`
+- ADMIN_TG_ID — list[int]. send_message(chat_id=list) -> TypeError.
+- Даже если починить п.14, п.15 всё равно сломает отправку.
+Как чинить: for admin_id in adminTgId: await app.bot.send_message(chat_id=admin_id, ...)
+Ответ админа:
+Исправить
+
+16) ВАЖНО: Нет фонового процесса active -> expired.
+Файлы: `common/models.py:103-109`
+- Когда valid_until проходит, status остаётся "active" навсегда.
+- В admin-панели протухшие подписки навечно "active".
+Как чинить: периодический UPDATE SET status='expired' WHERE valid_until < now().
+Ответ админа:
+Исправить
+
+===============================================================================
+ИТОГ ПО ГЛАВНОМУ ВОПРОСУ ("2 раза по месяцу" и бесшовность)
+===============================================================================
+
+1. СЕЙЧАС НЕ РАБОТАЕТ. Бот блокирует покупку при активной подписке (п.2).
+
+2. Минимальный набор фиксов для бесшовности:
+   - Снять блокировку в show_plan_details (п.2)
+   - valid_from = max(now, last_active.valid_until), valid_until = valid_from + duration
+   - Статус "paid"/"scheduled" для оплаченных будущих подписок (п.3)
+   - Фоновый scheduled -> active при наступлении valid_from
+   - _days_left(): MAX(valid_until) по всем active/paid (п.7)
+   - last_for_user() фильтровать по статусу (п.6)
+
+===============================================================================
+ПЛАН РЕАЛИЗАЦИИ ФИКСОВ (обсуждение)
+===============================================================================
+
+Порядок: сначала быстрые изолированные фиксы, потом связанные между собой.
+
+---------- ГРУППА 1: быстрые изолированные фиксы (можно делать параллельно) ----------
+
+п.14 + п.15 — daily report (2 бага)
+Решение админа: Исправить.
+План:
+  1. common/adapters.py — добавить метод в UsersAdapter:
+       async def new_users_last_24h(self) -> list[User]:
+           cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+           stmt = select(User).where(User.created_at >= cutoff).order_by(User.created_at.desc())
+           res = await self.s.execute(stmt)
+           return list(res.scalars().all())
+  2. bot/reports.py — итерация по списку админов:
+       for admin_id in adminTgId:
+           await app.bot.send_message(chat_id=admin_id, text=text, ...)
+  Затронутые файлы: common/adapters.py, bot/reports.py
+  Оценка: мелкий фикс, ~15 строк, ничего не ломает.
+
+п.8 — проверка владельца subscription_id в "Я оплатил"
+Решение админа: Исправить.
+План:
+  bot/actions/choose_plan.py: notify_payment_sent() — после загрузки sub проверить:
+    user = await db_call(lambda db: db.users.byTgId(query.from_user.id))
+    if user is None or sub.user_id != user.id:
+        await helpers.safe_edit(query, text="Подписка не найдена.", ...)
+        return
+  Затронутые файлы: bot/actions/choose_plan.py
+  Оценка: ~5 строк.
+
+п.10 — часовой пояс в админке
+Решение админа: Исправить.
+План:
+  Вариант: добавить подпись "(UTC)" рядом с полями ввода дат в шаблоне subscription_edit.html.
+  Или: парсить datetime-local как MSK и конвертировать в UTC при сохранении.
+  Вопрос к админу: какой подход? Просто пометить "(UTC)" или конвертировать из MSK?
+
+---------- ГРУППА 2: платёжный флоу (фиксы зависят друг от друга) ----------
+
+п.12 — PaymentEvent -> Subscription в одной транзакции + matched_event_id
+Решение админа: Исправить.
+План:
+  pay_verifier/service.py — объединить _record_event() и _activate_subscription():
+    async def _record_and_activate(self, match: PaymentMatch, sub_id) -> bool:
+        async def work(db):
+            # 1) создать PaymentEvent
+            event = PaymentEvent(
+                source=match.source,
+                received_at=match.received_at,
+                payload={"text": match.raw.text, **match.raw.meta},
+                amount_minor=match.amount_minor,
+            )
+            db._s.add(event)
+            await db._s.flush()  # получить event.id
+
+            # 2) активировать подписку + привязать event
+            stmt = (
+                sa_update(Subscription)
+                .where(Subscription.id == sub_id, Subscription.status == "pending_payment")
+                .values(status="active", matched_event_id=event.id, updated_at=func.now())
+            )
+            res = await db._s.execute(stmt)
+            await db._s.flush()
+            return (res.rowcount or 0) > 0
+        return await db_call(work)
+
+  В run_once() заменить два вызова на один:
+    # было:
+    #   await self._record_event(match)
+    #   updated = await self._activate_subscription(sub.id)
+    # стало:
+    updated = await self._record_and_activate(match, sub.id)
+
+  Затронутые файлы: pay_verifier/service.py
+  Оценка: замена двух методов одним. Тесты matchers не затрагиваются.
+
+п.5 — дедупликация платежей после рестарта
+Решение админа: Подумать, как исправить.
+План (предлагаю):
+  Подход: перед записью PaymentEvent проверять, что такого VK message_id ещё нет.
+  Можно внутри _record_and_activate() (из п.12) добавить проверку:
+    existing = await db._s.execute(
+        select(PaymentEvent.id).where(
+            PaymentEvent.payload['id'].astext == str(match.raw.meta.get('id'))
+        ).limit(1)
+    )
+    if existing.scalar_one_or_none() is not None:
+        return False  # уже обработано
+
+  Плюс можно добавить partial unique index в БД для надёжности:
+    CREATE UNIQUE INDEX idx_payment_events_vk_msg_id
+    ON payment_events ((payload->>'id'))
+    WHERE source = 'vk';
+
+  Затронутые файлы: pay_verifier/service.py, миграция БД
+  Важно: этот фикс хорошо ложится на п.12 — делать вместе в одной транзакции.
+
+п.4 — просрочка pending: уведомить юзера и перезапустить оплату
+Решение админа: Сообщить пользователю, перезапустить оплату, пометить просрочным.
+План:
+  Проблема: pay_verifier не имеет доступа к Telegram Bot API.
+  Варианты:
+    A) PostgreSQL NOTIFY при переводе в payment_overdue -> бот слушает и отправляет сообщение.
+    B) Новый канал уведомлений — pay_verifier пишет в таблицу notifications, бот poll'ит.
+    C) Бот сам poll'ит overdue подписки и сообщает (добавить задачу в bot/main.py).
+  Вариант C самый простой:
+    - В боте добавить фоновую задачу check_overdue_task():
+      - Каждые 30 сек: SELECT подписки status='payment_overdue' AND notified_user=false
+      - Отправить юзеру: "Время на оплату истекло. Нажмите кнопку, чтобы начать заново."
+      - Пометить notified_user=true (нужно новое поле или отдельная таблица).
+    - Кнопка "Начать заново" -> show_plan_details() (уже умеет создавать новый pending).
+  Вопрос к админу: подход C устраивает? Или лучше через NOTIFY?
+  Затронутые файлы: bot/main.py, bot/actions/* (новая задача), возможно миграция.
+
+п.13 — Race condition при поиске суммы
+Решение админа: Исправить.
+План:
+  Подход 1 (partial unique index — надёжнее):
+    Миграция:
+      CREATE UNIQUE INDEX idx_pending_amount
+      ON subscriptions (expected_amount_minor)
+      WHERE status = 'pending_payment';
+    Код: при INSERT подписки ловить IntegrityError -> retry с другой суммой.
+
+  Подход 2 (одна транзакция):
+    Перенести логику _find_free_amount() внутрь work() в choose_plan.py.
+    Вместо отдельного db_call — использовать ту же сессию db._s.
+    Это проще в коде, но без index остаётся теоретическое окно гонки
+    (две транзакции одновременно, до коммита обе видят сумму как свободную).
+
+  Рекомендация: подход 1 (index) + подход 2 (одна транзакция). Index как safety net.
+  Затронутые файлы: bot/actions/choose_plan.py, миграция БД.
+
+---------- ГРУППА 3: бесшовное продление (п.2 + п.3 + п.6 + п.7 + п.16) ----------
+Эти фиксы связаны и делаются вместе.
+
+п.6 — last_for_user фильтрация по статусу
+Решение админа: Исправить.
+План:
+  common/adapters.py: last_for_user() — добавить фильтр:
+    .where(Subscription.status.in_(["active", "pending_payment"]))
+  Или ввести новый метод last_valid_for_user() с фильтром, оставив старый для обратной совместимости.
+  Затронутые файлы: common/adapters.py
+  Зависимости: используется в subscription_service/admin/views/subscriptions.py:108.
+
+п.16 — фоновый active -> expired
+Решение админа: Исправить.
+План:
+  Добавить в pay_verifier/service.py метод _expire_active():
+    async def _expire_active(self) -> int:
+        async def work(db):
+            stmt = (
+                sa_update(Subscription)
+                .where(
+                    Subscription.status == "active",
+                    Subscription.valid_until.isnot(None),
+                    Subscription.valid_until < func.now(),
+                )
+                .values(status="expired", updated_at=func.now())
+                .execution_options(synchronize_session=False)
+            )
+            res = await db._s.execute(stmt)
+            await db._s.flush()
+            return int(res.rowcount or 0)
+        return await db_call(work)
+
+  Вызывать в run_once() в начале (рядом с _activate_free_and_trial и _mark_overdue_pending).
+  Затронутые файлы: pay_verifier/service.py
+  Оценка: ~15 строк, изолированный фикс.
+
+п.2 — разблокировать продление при активной подписке
+Решение админа: Нужно сделать.
+План:
+  bot/actions/choose_plan.py: show_plan_details() —
+  Вместо блокировки при _has_active() — разрешить, но сдвинуть valid_from:
+
+    async def work(db):
+        user = await db.users.getOrCreate(tg_user_id, username)
+
+        # Найти последнюю действующую подписку для вычисления старта
+        active_sub = await db.subscriptions.active_for_user(user.id)
+
+        # ... (существующая логика поиска/отмены pending) ...
+
+        now = datetime.now(timezone.utc)
+        # Ключевое изменение: новый период начинается после текущей подписки
+        start = now
+        if active_sub is not None and active_sub.valid_until is not None:
+            start = max(now, active_sub.valid_until)
+
+        valid_until = None
+        if plan.duration_days is not None:
+            valid_until = start + timedelta(days=int(plan.duration_days))
+
+        sub = await db.subscriptions.add(
+            user_id=user.id,
+            plan_id=plan.id,
+            valid_from=start,
+            valid_until=valid_until,
+            expected_amount_minor=amount_minor,
+            status="pending_payment",
+        )
+        return sub, plan
+
+  Важно: _calc_status() вернёт "pending_payment" для start > now — это правильно,
+  потому что оплата ещё не прошла. После оплаты verifier поставит "active".
+  Но п.3 нужен, чтобы "оплаченная будущая" подписка автоматически включилась.
+  Затронутые файлы: bot/actions/choose_plan.py
+
+п.3 — статусная модель для оплаченных будущих подписок
+Решение админа: Нужно исправить.
+План:
+  Вариант A (новый статус "scheduled"):
+    - Добавить в SubscriptionStatus: scheduled = "scheduled"
+    - Миграция: ALTER TYPE subscription_status ADD VALUE 'scheduled'
+    - В _activate_subscription(): если valid_from > now, ставить "scheduled" вместо "active"
+    - Фоновая задача в pay_verifier: _activate_scheduled():
+        UPDATE subscriptions SET status='active'
+        WHERE status='scheduled' AND valid_from <= now()
+    - access_sync: при status='scheduled' — не синкать доступ (доступ ещё не наступил)
+
+  Вариант B (без нового статуса — проще):
+    - _activate_subscription() всегда ставит status="active", даже если valid_from в будущем.
+    - active_for_user() уже фильтрует valid_from <= now — не покажет будущую подписку.
+    - access_sync already checks valid_from <= now для active.
+    - Единственное: active_for_user() вернёт NULL, а в UI юзер увидит текущую подписку
+      через отдельный запрос "все active подписки данного юзера".
+    - _days_left() считает MAX(valid_until) по всем active — покажет корректный остаток.
+
+  Рекомендация: вариант B проще, не нужна миграция enum, не нужен фоновый переход.
+  Если ставить active сразу, то:
+    - active_for_user() уже отсекает будущие (valid_from <= now)
+    - Но нужен метод max_valid_until_for_user() для подсчёта дней (п.7)
+    - access_sync уже правильно фильтрует по дате
+
+  Вопрос к админу: вариант A (новый статус "scheduled") или B (active сразу, фильтрация по датам)?
+
+п.7 — суммирование дней в UI
+Решение админа: Исправить.
+План:
+  1. common/adapters.py — новый метод:
+     async def max_valid_until_for_user(self, user_id: uuid.UUID) -> datetime | None:
+         stmt = select(func.max(Subscription.valid_until)).where(
+             Subscription.user_id == user_id,
+             Subscription.status.in_(["active", "scheduled"]),  # или только "active" при варианте B
+             Subscription.valid_until.isnot(None),
+         )
+         res = await self.s.execute(stmt)
+         return res.scalar_one_or_none()
+
+  2. bot/actions/main_menu.py — build_main_view():
+     Вместо _days_left(active_sub.valid_until) ->
+       max_until = await db_call(lambda db: db.subscriptions.max_valid_until_for_user(user.id))
+       days_left = _days_left(max_until)
+
+  Затронутые файлы: common/adapters.py, bot/actions/main_menu.py
+
+п.9 — push-уведомления пользователям
+Решение админа: Исправить. Добавить уведомления о скором конце подписки.
+План:
+  Добавить фоновую задачу в бот (bot/main.py):
+    async def subscription_expiry_reminder(app):
+        while True:
+            # Раз в час проверяем подписки, истекающие через 3 дня
+            cutoff_start = datetime.now(UTC) + timedelta(days=3)
+            cutoff_end = cutoff_start + timedelta(hours=1)
+            # SELECT подписки status='active' AND valid_until BETWEEN cutoff_start AND cutoff_end
+            # Для каждой — отправить юзеру:
+            #   "Ваша подписка истекает через 3 дня. Продлить?"
+            #   [Кнопка: Продлить -> choose_plan]
+            await asyncio.sleep(3600)
+
+  Нужна защита от повторных отправок (поле reminded_at или отдельная таблица).
+  Затронутые файлы: bot/main.py, возможно миграция для reminded_at.
+  Оценка: средний объём, но не критический — можно делать в последнюю очередь.
+
+п.11 — trial в pending_payment показывается как рабочий
+Ответ админа: (не указан)
+Текущее поведение: trial создаётся как pending_payment, но доступ уже выдан.
+Предложение: Если это осознанное решение — оставить как есть. Trial бесплатный, поэтому
+  pending_payment -> active происходит автоматически через _activate_free_and_trial().
+  Задержка — только до следующего цикла pay_verifier (poll_interval_seconds, обычно 5 сек).
+  Фактически trial "мигает" в pending 5 секунд. Не стоит менять, если устраивает.
+Вопрос к админу: оставить как есть или при создании trial сразу ставить status="active"?
+
+===============================================================================
+ИТОГОВЫЙ ПОРЯДОК РЕАЛИЗАЦИИ
+===============================================================================
+
+Фаза 1 — быстрые изолированные фиксы (1-2 часа):
+  [x] п.14 + п.15 — daily report
+  [x] п.8 — проверка владельца subscription_id
+  [x] п.16 — фоновый active -> expired
+  [x] п.6 — фильтр статусов в last_for_user
+
+Фаза 2 — платёжный флоу (2-3 часа):
+  [x] п.12 — единая транзакция _record_and_activate + matched_event_id
+  [x] п.5 — дедупликация через проверку payload->>'id' + index
+
+Фаза 3 — бесшовное продление (3-4 часа):
+  [x] п.2 — снять блокировку, сдвигать valid_from
+  [x] п.3 — решить вариант A или B для будущих подписок
+  [x] п.7 — max_valid_until_for_user + обновить _days_left в UI
+  [x] п.13 — partial unique index + одна транзакция для суммы
+
+Фаза 4 — уведомления (отдельно, не блокирует остальное):
+  [x] п.4 — уведомление юзеру при overdue + "начать заново"
+  [x] п.9 — напоминание за 3 дня до конца подписки
+  [x] п.10 — пометить даты "(UTC)" в админке
+
+===============================================================================
+СОВМЕСТНОЕ РЕШЕНИЕ (Codex + Claude): как правим без регрессий
+===============================================================================
+
+Важно: чекбоксы [x] выше трактуем как "согласовано к реализации", а не "уже внедрено в код".
+
+1) По п.1 (старт срока от момента создания pending)
+Решение:
+- Оставляем как есть по бизнес-правилу (окно оплаты 15 мин).
+- Не меняем модель дат для этого пункта отдельно.
+- Компенсируем UX-риски через п.4: явное уведомление о просрочке и быстрый рестарт оплаты.
+
+2) По п.3 (будущие подписки) — выбираем Вариант B
+Решение:
+- Не вводим новый enum-статус `scheduled`.
+- После подтверждения оплаты ставим `status='active'` сразу.
+- Гейтинг доступа и отображения оставляем на интервалах времени:
+  `valid_from <= now <= valid_until` (или valid_until is null).
+Почему так:
+- Нет миграции enum и меньше точек отказа.
+- Совместимо с текущим `active_for_user()` и `active_subscription_users()`.
+
+3) По п.2 + п.7 (продление и "2 раза по месяцу")
+Решение:
+- Убираем блокировку покупки при активной подписке.
+- Новый оплачиваемый период создаём с:
+  `start = max(now, current_effective_end)` и `end = start + duration`.
+- В UI считаем остаток по максимальному `valid_until` среди оплаченных периодов пользователя.
+Практика:
+- Добавить метод `max_valid_until_for_user()`.
+- В main menu выводить `Осталось` от этого значения.
+
+4) По п.6 (last_for_user) — фикс обязателен
+Решение:
+- В расчетах продления учитывать только релевантные статусы:
+  `active` и `pending_payment` (или отдельный метод `last_billable_for_user`).
+- `canceled/payment_failed/payment_overdue/expired` исключить.
+
+5) По п.12 + п.5 (платежная идемпотентность) — делаем вместе
+Решение:
+- Объединить запись `PaymentEvent` и активацию подписки в одну транзакцию.
+- При успешной активации проставлять `matched_event_id`.
+- Для VK добавить уникальность по message id:
+  unique index на `(source, payload->>'id')` c `WHERE source='vk'`.
+- При конфликте/дубликате не активировать новую подписку повторно.
+
+6) По п.13 (гонка суммы) — обязательно DB-ограничение
+Решение:
+- Ввести partial unique index:
+  `UNIQUE(expected_amount_minor) WHERE status='pending_payment'`.
+- В коде создания pending делать retry при `IntegrityError`.
+- Поиск свободной суммы оставить в той же транзакции, но считать это оптимизацией, а не защитой.
+
+7) По п.4 (overdue за 15 минут) — реализация в боте, не в verifier
+Решение:
+- Verifier только ставит `payment_overdue`.
+- Бот отдельной фоновой задачей уведомляет пользователя один раз:
+  "Время оплаты истекло, начните заново".
+- Нужен маркер одноразовой отправки (новое поле или таблица уведомлений).
+
+8) По п.9 (уведомления окончания подписки)
+Решение:
+- Добавить напоминания за 3 дня и за 24 часа.
+- Антидублирование: хранить факт отправки (таблица reminders или флаги на подписке).
+- Сообщение с CTA-кнопкой "Продлить" -> `choose_plan`.
+
+9) По п.10 (таймзона админки)
+Решение:
+- Минимум: явно пометить поля как UTC в UI.
+- Правильно: хранить и редактировать в UTC, но в форме показывать в выбранной TZ админа.
+- На первом этапе делаем минимум (маркировка UTC), затем полноценную TZ-конвертацию.
+
+10) По п.11 (trial как pending)
+Решение:
+- Если trial действительно бесплатный и доступ выдаётся сразу — лучше сразу создавать `status='active'`.
+- Это убирает противоречие модели и зависимость UX от цикла verifier.
+- Если оставлять pending, нужно явно документировать это как временное техническое состояние.
+
+===============================================================================
+КОНКРЕТНЫЙ ПОРЯДОК ВНЕДРЕНИЯ (рекомендован)
+===============================================================================
+
+Шаг 1: Надёжность платежей
+- п.12, п.5, п.13 в одном PR (транзакция + matched_event_id + уникальные индексы + retry).
+
+Шаг 2: Продление и корректный остаток дней
+- п.2, п.6, п.7 в одном PR (разблокировка продления, корректный start/end, max_valid_until).
+
+Шаг 3: Сервисные исправления
+- п.14, п.15, п.16, п.8 (быстрые и малорисковые).
+
+Шаг 4: Коммуникация с пользователем
+- п.4, п.9, п.10, п.11.
+
+Критерий готовности сценария "оплачено 2 раза по месяцу":
+- При второй оплате `valid_from` второй подписки = `valid_until` первой.
+- `Осталось` в меню показывает суммарный горизонт до конца второй подписки.
+- В момент стыка периодов доступ не пропадает и не требует ручных действий.
+
+===============================================================================
+ОТВЕТ CLAUDE (ревьюер) на решения Codex
+===============================================================================
+
+По пунктам 1-9: полностью согласен. Вариант B для п.3 — правильный выбор.
+Порядок шагов — логичный.
+
+Спорный момент по п.11 (trial):
+
+Codex: "лучше сразу создавать status='active'"
+Claude: Не согласен. Вот почему:
+
+  Проблема: _ensure_trial_subscription() вызывается в build_main_view().
+  Если сразу ставить active, нужно также сразу вызвать access_sync,
+  чтобы добавить юзера на VPN-серверы. Сейчас за это отвечает цепочка:
+    pending -> _activate_free_and_trial() -> status='active'
+    -> PostgreSQL NOTIFY subscriptions_changed
+    -> access_sync получает и синкает юзера
+
+  Если ставить active в боте напрямую, нужно:
+  а) Вручную отправлять NOTIFY из бота — это лишняя связность.
+  б) Или ждать периодического sync в access_sync (до 1 часа).
+
+  Текущая схема (pending -> verifier -> active -> notify -> sync) работает
+  за 5 сек и не требует изменений в боте.
+
+  Предложение: оставить как есть. Задокументировать, что trial pending — это
+  техническое состояние длительностью ~5 сек, а не баг.
+
+Если админ хочет поменять — можно, но тогда нужно:
+  1. В _ensure_trial_subscription: status="active" вместо "pending_payment"
+  2. В _ensure_trial_subscription: после flush() вызвать NOTIFY или добавить
+     вызов access_sync напрямую
+  3. Убрать trial из _activate_free_and_trial() (иначе дубль обработки)
+
+Трудозатраты больше, чем выигрыш. Оставляем.
+
+По порядку шагов — одно замечание:
+
+Codex предлагает п.14+п.15 (daily report) в Шаге 3.
+Claude: Лучше в Шаге 1 или 0. Причина:
+  - Это 2 явных бага (AttributeError + TypeError), которые крашатся КАЖДЫЙ ДЕНЬ.
+  - Фикс — 15 строк, 0 риска регрессии, 0 зависимостей.
+  - Можно сделать за 10 минут и сразу задеплоить.
+  - Нет смысла откладывать до шага 3.
+
+Итого предлагаю финальный порядок:
+
+  Шаг 0 (10 мин, можно прямо сейчас):
+    п.14 + п.15 — daily report
+    п.10 — пометить "(UTC)" в шаблоне
+
+  Шаг 1 (надёжность платежей):
+    п.12 + п.5 + п.13 — единая транзакция, matched_event_id, дедупликация, unique index
+
+  Шаг 2 (продление и дни):
+    п.2 + п.6 + п.7 — разблокировка, last_for_user фильтр, max_valid_until
+
+  Шаг 3 (автоматика статусов):
+    п.16 + п.8 — expire_active, проверка владельца subscription_id
+
+  Шаг 4 (уведомления):
+    п.4 + п.9 — overdue + напоминание за 3 дня
+
+===============================================================================
+РЕШЕНИЕ: СОГЛАСОВАНО
+===============================================================================
+
+Все вопросы закрыты. Разногласие по п.11 — оставляем как есть (trial pending 5 сек).
+Порядок: Шаг 0 -> 1 -> 2 -> 3 -> 4.
+Миграции собрать в один файл:
+  ALTER TABLE subscriptions ADD COLUMN notified_overdue BOOLEAN NOT NULL DEFAULT false;
+  ALTER TABLE subscriptions ADD COLUMN reminded_at TIMESTAMPTZ;
+  CREATE UNIQUE INDEX idx_payment_events_vk_msg_id
+    ON payment_events ((payload->>'id')) WHERE source = 'vk' AND payload->>'id' IS NOT NULL;
+  CREATE UNIQUE INDEX idx_pending_amount
+    ON subscriptions (expected_amount_minor) WHERE status = 'pending_payment';
+
+Готово к реализации. Ждём "добро" от админа на старт.

@@ -28,6 +28,12 @@ ALTER TABLE users
 
 ALTER TABLE subscriptions
   ADD COLUMN IF NOT EXISTS expected_amount_minor INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE subscriptions
+  ADD COLUMN IF NOT EXISTS notified_overdue BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE subscriptions
+  ADD COLUMN IF NOT EXISTS reminded_at TIMESTAMPTZ;
+ALTER TABLE subscriptions
+  ADD COLUMN IF NOT EXISTS notified_expired BOOLEAN NOT NULL DEFAULT FALSE;
 
 DO $$
 BEGIN
@@ -165,7 +171,7 @@ CREATE POLICY subs_verifier_update_pending
 ON subscriptions
 FOR UPDATE
 TO sub_verifier
-USING (status = 'pending_payment')
+USING (status IN ('pending_payment', 'active'))
 WITH CHECK (status IN ('active','payment_failed','payment_overdue','canceled','expired'));
 
 DROP POLICY IF EXISTS subs_reader_insert_all ON subscriptions;
@@ -189,7 +195,7 @@ REVOKE ALL ON subscriptions FROM sub_verifier;
 REVOKE ALL ON subscriptions FROM sub_reader;
 
 GRANT SELECT, INSERT, UPDATE ON subscriptions TO sub_creator;
-GRANT SELECT, UPDATE(status, updated_at) ON subscriptions TO sub_verifier;
+GRANT SELECT, UPDATE(status, updated_at, matched_event_id) ON subscriptions TO sub_verifier;
 GRANT SELECT, INSERT, UPDATE ON subscriptions TO sub_reader;
 
 REVOKE UPDATE(status) ON subscriptions FROM sub_creator;

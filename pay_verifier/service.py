@@ -4,7 +4,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Iterable
 
-from sqlalchemy import select, update as sa_update, func
+from sqlalchemy import select, update as sa_update, func, and_
 
 from common.db import db_call
 from common.logger import Logger
@@ -46,6 +46,10 @@ class PaymentPollingService:
                     pass
 
     async def run_once(self) -> None:
+        expired = await self._expire_active()
+        if expired:
+            Logger.info("Expired active subscriptions: %d", expired)
+
         auto_activated = await self._activate_free_and_trial()
         if auto_activated:
             Logger.info("Auto-activated free/trial subscriptions: %d", auto_activated)
@@ -77,8 +81,7 @@ class PaymentPollingService:
                 if not sub:
                     Logger.info("No pending subscription for amount_minor=%s", match.amount_minor)
                     continue
-                await self._record_event(match)
-                updated = await self._activate_subscription(sub.id)
+                updated = await self._record_and_activate(match, sub.id)
                 if updated:
                     Logger.info("Subscription activated: id=%s amount_minor=%s, user: %s", sub.id, match.amount_minor, sub.user_id)
 
@@ -125,38 +128,72 @@ class PaymentPollingService:
                 return match
         return None
 
-    async def _record_event(self, match: PaymentMatch) -> None:
+    async def _record_and_activate(self, match: PaymentMatch, sub_id) -> bool:
         payload = {
             "text": match.raw.text,
             **match.raw.meta,
         }
+        msg_id = match.raw.meta.get("id")
 
         async def work(db):
-            db._s.add(
-                PaymentEvent(
-                    source=match.source,
-                    received_at=match.received_at,
-                    payload=payload,
-                    amount_minor=match.amount_minor,
+            if isinstance(msg_id, (int, str)):
+                dedupe_stmt = (
+                    select(PaymentEvent.id)
+                    .where(
+                        and_(
+                            PaymentEvent.source == match.source,
+                            PaymentEvent.payload["id"].astext == str(msg_id),
+                        )
+                    )
+                    .limit(1)
                 )
+                already_processed = (await db._s.execute(dedupe_stmt)).scalar_one_or_none()
+                if already_processed is not None:
+                    return False
+
+            event = PaymentEvent(
+                source=match.source,
+                received_at=match.received_at,
+                payload=payload,
+                amount_minor=match.amount_minor,
             )
+            db._s.add(event)
             await db._s.flush()
-
-        await db_call(work)
-
-    async def _activate_subscription(self, sub_id) -> bool:
-        async def work(db):
             stmt = (
                 sa_update(Subscription)
                 .where(
                     Subscription.id == sub_id,
                     Subscription.status == "pending_payment",
                 )
-                .values(status="active", updated_at=func.now())
+                .values(status="active", matched_event_id=event.id, updated_at=func.now())
+            )
+            res = await db._s.execute(stmt)
+            updated = (res.rowcount or 0) > 0
+            if not updated:
+                await db._s.delete(event)
+                await db._s.flush()
+                return False
+
+            await db._s.flush()
+            return True
+
+        return await db_call(work)
+
+    async def _expire_active(self) -> int:
+        async def work(db):
+            stmt = (
+                sa_update(Subscription)
+                .where(
+                    Subscription.status == "active",
+                    Subscription.valid_until.isnot(None),
+                    Subscription.valid_until < func.now(),
+                )
+                .values(status="expired", notified_expired=False, updated_at=func.now())
+                .execution_options(synchronize_session=False)
             )
             res = await db._s.execute(stmt)
             await db._s.flush()
-            return (res.rowcount or 0) > 0
+            return int(res.rowcount or 0)
 
         return await db_call(work)
 
@@ -190,7 +227,7 @@ class PaymentPollingService:
                     Subscription.plan_id == Plan.id,
                     ~Plan.code.in_(["free", "trial"]),
                 )
-                .values(status="payment_overdue", updated_at=func.now())
+                .values(status="payment_overdue", notified_overdue=False, updated_at=func.now())
                 .execution_options(synchronize_session=False)
             )
             res = await db._s.execute(stmt)

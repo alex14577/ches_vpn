@@ -19,6 +19,11 @@ from telegram.ext import (
 
 from common.db import db_call, init_db_engine
 from bot.reports import daily_report_task
+from bot.subscription_tasks import (
+    overdue_notification_task,
+    expiry_reminder_task,
+    expired_notification_task,
+)
 from common.logger import Logger, Level
 from common.models import User
 from common.xui_client.registry import Manager
@@ -65,6 +70,9 @@ def build_app() -> Application:
             BotCommand("menu", "Открыть меню"),
         ])
         asyncio.create_task(daily_report_task(application, adminTgId=ADMIN_TG_ID))
+        asyncio.create_task(overdue_notification_task(application))
+        asyncio.create_task(expiry_reminder_task(application))
+        asyncio.create_task(expired_notification_task(application))
 
     app.post_init = _post_init
 

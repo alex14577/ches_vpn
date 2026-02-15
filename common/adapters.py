@@ -91,6 +91,16 @@ class UsersAdapter:
 
         res = await self.s.execute(stmt)
         return list(res.scalars().all())
+
+    async def new_users_last_24h(self) -> list[User]:
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+        stmt = (
+            select(User)
+            .where(User.created_at >= cutoff)
+            .order_by(User.created_at.desc())
+        )
+        res = await self.s.execute(stmt)
+        return list(res.scalars().all())
     
     async def list_with_source_stats(
         self,
@@ -217,13 +227,28 @@ class SubscriptionAdapter:
     async def last_for_user(self, user_id):
         stmt = (
             select(Subscription)
-            .where(Subscription.user_id == user_id)
+            .where(
+                Subscription.user_id == user_id,
+                Subscription.status.in_([self.ACTIVE, self.PENDING]),
+            )
             .order_by(
                 Subscription.valid_until.desc().nullsfirst(),  # NULL (бессрочная) считаем “самой новой”
                 Subscription.valid_from.desc(),
                 Subscription.created_at.desc(),
             )
             .limit(1)
+        )
+        res = await self.s.execute(stmt)
+        return res.scalar_one_or_none()
+
+    async def max_valid_until_for_user(self, user_id: uuid.UUID) -> Optional[datetime]:
+        stmt = (
+            select(func.max(Subscription.valid_until))
+            .where(
+                Subscription.user_id == user_id,
+                Subscription.status == self.ACTIVE,
+                Subscription.valid_until.isnot(None),
+            )
         )
         res = await self.s.execute(stmt)
         return res.scalar_one_or_none()

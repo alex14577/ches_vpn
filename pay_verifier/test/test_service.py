@@ -23,7 +23,7 @@ class PaymentPollingServiceTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_run_once_matches_and_updates(self) -> None:
         pending = [
-            SimpleNamespace(id="sub-1", expected_amount_minor=130043),
+            SimpleNamespace(id="sub-1", expected_amount_minor=130043, user_id="user-1"),
         ]
 
         msg = RawMessage(
@@ -34,16 +34,23 @@ class PaymentPollingServiceTest(unittest.IsolatedAsyncioTestCase):
         )
 
         updated_ids = []
-        recorded = []
+        expired_calls = []
 
         class TestService(PaymentPollingService):
+            async def _expire_active(self):
+                expired_calls.append(True)
+                return 0
+
+            async def _activate_free_and_trial(self):
+                return 0
+
+            async def _mark_overdue_pending(self):
+                return 0
+
             async def _load_pending(self):
                 return pending
 
-            async def _record_event(self, match):
-                recorded.append(match)
-
-            async def _activate_subscription(self, sub_id):
+            async def _record_and_activate(self, match, sub_id):
                 updated_ids.append(sub_id)
                 return True
 
@@ -57,9 +64,8 @@ class PaymentPollingServiceTest(unittest.IsolatedAsyncioTestCase):
 
         await service.run_once()
 
+        self.assertEqual(len(expired_calls), 1)
         self.assertEqual(updated_ids, ["sub-1"])
-        self.assertEqual(len(recorded), 1)
-        self.assertEqual(recorded[0].amount_minor, 130043)
 
     async def test_run_once_skips_when_no_pending(self) -> None:
         msg = RawMessage(
@@ -70,12 +76,23 @@ class PaymentPollingServiceTest(unittest.IsolatedAsyncioTestCase):
         )
 
         updated_ids = []
+        expired_calls = []
 
         class TestService(PaymentPollingService):
+            async def _expire_active(self):
+                expired_calls.append(True)
+                return 0
+
+            async def _activate_free_and_trial(self):
+                return 0
+
+            async def _mark_overdue_pending(self):
+                return 0
+
             async def _load_pending(self):
                 return []
 
-            async def _activate_subscription(self, sub_id):
+            async def _record_and_activate(self, match, sub_id):
                 updated_ids.append(sub_id)
                 return True
 
@@ -88,6 +105,7 @@ class PaymentPollingServiceTest(unittest.IsolatedAsyncioTestCase):
         )
 
         await service.run_once()
+        self.assertEqual(len(expired_calls), 1)
         self.assertEqual(updated_ids, [])
 
 

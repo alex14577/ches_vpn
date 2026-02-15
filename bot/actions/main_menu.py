@@ -85,6 +85,10 @@ async def _get_active_subscription(
     return await db_call(_load)
 
 
+async def _get_max_valid_until(user: User) -> datetime | None:
+    return await db_call(lambda db: db.subscriptions.max_valid_until_for_user(user.id))
+
+
 async def _get_pending_trial_subscription(
     user: User,
 ) -> tuple[Subscription | None, Plan | None]:
@@ -144,7 +148,8 @@ async def build_main_view(
         return text, InlineKeyboardMarkup(rows)
 
     plan_title = active_plan.title if active_plan is not None else "неизвестен"
-    days_left = _days_left(active_sub.valid_until)
+    max_valid_until = await _get_max_valid_until(user)
+    days_left = _days_left(max_valid_until or active_sub.valid_until)
     connect_ref = _make_connect_ref(user.subscription_token)
     text = (
         "VPN готов к работе\n\n"

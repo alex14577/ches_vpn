@@ -3,8 +3,9 @@ import uuid
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from sqlalchemy import select, update as sa_update
+from sqlalchemy.exc import IntegrityError
 
-from bot.actions import main_menu, return_main_menu, settings
+from bot.actions import return_main_menu, settings
 from bot.helpers import helpers
 from common.db import db_call
 from common.models import Plan, Subscription
@@ -41,20 +42,17 @@ async def show_plans(query, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
-async def _find_free_amount(base_minor: int) -> int | None:
+async def _find_free_amount(db, base_minor: int) -> int | None:
     low = base_minor + 1
     high = base_minor + 99
 
-    async def fetch(db):
-        res = await db._s.execute(
-            select(Subscription.expected_amount_minor).where(
-                Subscription.status == "pending_payment",
-                Subscription.expected_amount_minor.between(low, high),
-            )
+    res = await db._s.execute(
+        select(Subscription.expected_amount_minor).where(
+            Subscription.status == "pending_payment",
+            Subscription.expected_amount_minor.between(low, high),
         )
-        return [row[0] for row in res.all()]
-
-    used = await db_call(fetch)
+    )
+    used = [row[0] for row in res.all()]
     used_set = {val for val in used if isinstance(val, int)}
     for cents in range(1, 100):
         candidate = base_minor + cents
@@ -86,23 +84,13 @@ async def show_plan_details(
         )
         return
 
-    async def _has_active(db):
-        user = await db.users.getOrCreate(tg_user_id, username)
-        active_sub = await db.subscriptions.active_for_user(user.id)
-        return active_sub is not None
-
-    if await db_call(_has_active):
-        text, reply_markup = await main_menu.build_main_view(tg_user_id, username)
-        await helpers.safe_edit(
-            query,
-            text=text,
-            reply_markup=reply_markup,
-            parse_mode=HTML,
-        )
-        return
-
     async def work(db):
         user = await db.users.getOrCreate(tg_user_id, username)
+        active_sub = await db.subscriptions.active_for_user(user.id)
+
+        if active_sub is not None and active_sub.valid_until is None:
+            return "unlimited", None, plan
+
         res = await db._s.execute(
             select(Subscription)
             .where(
@@ -124,32 +112,50 @@ async def show_plan_details(
 
         if existing is not None:
             plan_for_sub = await db.plans.get(existing.plan_id)
-            return existing, plan_for_sub
+            return "ok", existing, plan_for_sub
 
         base_minor = int(plan.price_rub) * 100
-        amount_minor = await _find_free_amount(base_minor)
-        if amount_minor is None:
-            amount_minor = await _find_free_amount(base_minor + 100)
-        if amount_minor is None:
-            return None, plan
-
+        max_valid_until = await db.subscriptions.max_valid_until_for_user(user.id)
         now = datetime.now(timezone.utc)
+        start = max(now, max_valid_until) if max_valid_until is not None else now
+
         valid_until = None
         if plan.duration_days is not None:
-            valid_until = now + timedelta(days=int(plan.duration_days))
+            valid_until = start + timedelta(days=int(plan.duration_days))
 
-        sub = await db.subscriptions.add(
-            user_id=user.id,
-            plan_id=plan.id,
-            valid_from=now,
-            valid_until=valid_until,
-            expected_amount_minor=amount_minor,
-            status="pending_payment",
-        )
-        return sub, plan
+        for _ in range(5):
+            amount_minor = await _find_free_amount(db, base_minor)
+            if amount_minor is None:
+                amount_minor = await _find_free_amount(db, base_minor + 100)
+            if amount_minor is None:
+                return "no_amount", None, plan
+            try:
+                async with db._s.begin_nested():
+                    sub = await db.subscriptions.add(
+                        user_id=user.id,
+                        plan_id=plan.id,
+                        valid_from=start,
+                        valid_until=valid_until,
+                        expected_amount_minor=amount_minor,
+                        status="pending_payment",
+                    )
+                return "ok", sub, plan
+            except IntegrityError:
+                continue
 
-    sub, plan_for_sub = await db_call(work)
+        return "no_amount", None, plan
+
+    result, sub, plan_for_sub = await db_call(work)
     plan_for_sub = plan_for_sub or plan
+
+    if result == "unlimited":
+        await helpers.safe_edit(
+            query,
+            text="У вас уже бессрочная активная подписка. Продление не требуется.",
+            reply_markup=return_main_menu.keyboard(),
+            parse_mode=HTML,
+        )
+        return
 
     if sub is None:
         await helpers.safe_edit(
@@ -190,18 +196,30 @@ async def notify_payment_sent(
 
     async def load(db):
         if sub_id is None:
-            return None
+            return None, None
+        current_user = await db.users.byTgId(query.from_user.id)
+        if current_user is None:
+            return None, None
         res = await db._s.execute(
             select(Subscription, Plan).join(Plan, Plan.id == Subscription.plan_id).where(
                 Subscription.id == sub_id
             )
         )
         row = res.first()
-        return row
+        return row, current_user
 
-    row = await db_call(load)
+    row, current_user = await db_call(load)
     plan = row[1] if row else None
     sub = row[0] if row else None
+
+    if sub is None or current_user is None or sub.user_id != current_user.id:
+        await helpers.safe_edit(
+            query,
+            text="Подписка не найдена.",
+            reply_markup=return_main_menu.keyboard(),
+            parse_mode=HTML,
+        )
+        return
 
     user = query.from_user
     username = f"@{user.username}" if user and user.username else "без username"

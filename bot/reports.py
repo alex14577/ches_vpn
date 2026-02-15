@@ -38,11 +38,12 @@ async def daily_report_task(app: Application, adminTgId) -> None:
                     names.append(f"(no_username:{u.tg_user_id})")
 
             text = "Новые пользователи за последние 24 часа:\n" + ("\n".join(names) if names else "(нет)")
-            await app.bot.send_message(
-                chat_id=adminTgId,
-                text=text,
-                disable_web_page_preview=True,
-            )
+            for admin_id in adminTgId:
+                await app.bot.send_message(
+                    chat_id=admin_id,
+                    text=text,
+                    disable_web_page_preview=True,
+                )
         except Exception:
             Logger.exception("daily_report_task failed")
             await asyncio.sleep(5)

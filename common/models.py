@@ -162,6 +162,18 @@ class Subscription(SQLModel, table=True):
     updated_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
     )
+    notified_overdue: bool = Field(
+        default=False,
+        sa_column=Column(Boolean, nullable=False, server_default="false"),
+    )
+    reminded_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
+    notified_expired: bool = Field(
+        default=False,
+        sa_column=Column(Boolean, nullable=False, server_default="false"),
+    )
 
     user: "User" = Relationship(back_populates="subscriptions", sa_relationship_kwargs={"lazy": "selectin"})
     plan: "Plan" = Relationship(back_populates="subscriptions", sa_relationship_kwargs={"lazy": "selectin"})
