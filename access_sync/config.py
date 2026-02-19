@@ -16,5 +16,5 @@ class AccessSyncConfig:
 
 def load_config() -> AccessSyncConfig:
     return AccessSyncConfig(
-        interval_seconds=_get_int("ACCESS_SYNC_INTERVAL_SECONDS", 10),
+        interval_seconds=_get_int("ACCESS_SYNC_INTERVAL_SECONDS", 60),
     )

@@ -13,7 +13,7 @@ from common.xui_client.registry import Manager
 class AccessSyncService:
     def __init__(self, manager: Manager, *, interval_seconds: int) -> None:
         self._manager = manager
-        self._interval_seconds = max(10, int(interval_seconds))
+        self._interval_seconds = max(60, int(interval_seconds))
 
     async def run_once(self) -> None:
         active_users: list[User] = await db_call(lambda db: db.users.active_subscription_users())
