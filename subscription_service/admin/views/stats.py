@@ -26,7 +26,7 @@ async def stats_users_page(request: Request):
     live = await server_manager.collect_user_traffic()
     label_map = await server_manager.collect_user_labels()
     users = await db_call(lambda db: db.users.all())
-    user_labels = {u.id: (u.username or str(u.tg_user_id)) for u in users}
+    user_labels = {u.id: (u.full_name or u.username or str(u.tg_user_id)) for u in users}
     for user_id, label in label_map.items():
         if user_id not in user_labels and label:
             user_labels[user_id] = f"{label} NOT-DB"
@@ -60,7 +60,7 @@ async def stats_users_page(request: Request):
     snapshots = await db_call(lambda db: db.stats.user_snapshots_range(start_day, latest_day))
     users = await db_call(lambda db: db.users.all())
 
-    user_labels = {u.id: (u.username or str(u.tg_user_id)) for u in users}
+    user_labels = {u.id: (u.full_name or u.username or str(u.tg_user_id)) for u in users}
     label_map = await request.app.state.serverManager.collect_user_labels()
     for user_id, label in label_map.items():
         if user_id not in user_labels and label:
