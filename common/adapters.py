@@ -47,12 +47,18 @@ class UsersAdapter:
         res = await self.s.execute(select(User).where(User.id.in_(ids)))
         return list(res.scalars().all())
 
-    async def getOrCreate(self, tg_user_id: int, username: Optional[str] = None, refer_id: Optional[str] = None) -> User:
+    async def getOrCreate(self, tg_user_id: int, username: Optional[str] = None, refer_id: Optional[str] = None, full_name: Optional[str] = None) -> User:
         u = await self.byTgId(tg_user_id)
         if u:
+            if full_name is not None and u.full_name != full_name:
+                await self.s.execute(
+                    sa_update(User).where(User.id == u.id).values(full_name=full_name)
+                )
+                u.full_name = full_name
+                await self.s.flush()
             return u
 
-        u = User(tg_user_id=tg_user_id, username=username, refer_id=refer_id)
+        u = User(tg_user_id=tg_user_id, username=username, refer_id=refer_id, full_name=full_name)
         self.s.add(u)
         await self.s.flush()
         return u
@@ -61,7 +67,7 @@ class UsersAdapter:
         stmt = (
             sa_update(User)
             .where(User.id == user.id)
-            .values(username=user.username, refer_id=user.refer_id)
+            .values(username=user.username, refer_id=user.refer_id, full_name=user.full_name)
         )
         await self.s.execute(stmt)
         await self.s.flush()

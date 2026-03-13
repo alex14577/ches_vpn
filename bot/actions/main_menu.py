@@ -24,8 +24,8 @@ def _make_share_ref(connect_ref: str) -> str:
     return f"https://t.me/share/url?url={quote(connect_ref)}"
 
 
-async def _get_user(tg_user_id: int, username: str | None) -> User:
-    return await db_call(lambda db: db.users.getOrCreate(tg_user_id, username))
+async def _get_user(tg_user_id: int, username: str | None, full_name: str | None = None) -> User:
+    return await db_call(lambda db: db.users.getOrCreate(tg_user_id, username, full_name=full_name))
 
 
 def _days_left(valid_until: datetime | None) -> str:
@@ -122,8 +122,9 @@ async def _get_available_plans() -> list[Plan]:
 async def build_main_view(
     tg_user_id: int,
     username: str | None,
+    full_name: str | None = None,
 ) -> tuple[str, InlineKeyboardMarkup]:
-    user = await _get_user(tg_user_id, username)
+    user = await _get_user(tg_user_id, username, full_name)
     await _ensure_trial_subscription(user)
     active_sub, active_plan = await _get_active_subscription(user)
     if active_sub is None:
@@ -171,8 +172,9 @@ async def build_main_view(
 async def build_other_device_view(
     tg_user_id: int,
     username: str | None,
+    full_name: str | None = None,
 ) -> tuple[str, InlineKeyboardMarkup]:
-    user = await _get_user(tg_user_id, username)
+    user = await _get_user(tg_user_id, username, full_name)
     await _ensure_trial_subscription(user)
     connect_ref = _make_connect_ref(user.subscription_token)
     share_ref = _make_share_ref(connect_ref)
@@ -190,8 +192,9 @@ async def render_other_device(
     query: CallbackQuery,
     tg_user_id: int,
     username: str | None,
+    full_name: str | None = None,
 ) -> None:
-    text, reply_markup = await build_other_device_view(tg_user_id, username)
+    text, reply_markup = await build_other_device_view(tg_user_id, username, full_name)
     await helpers.safe_edit(
         query,
         text=text,

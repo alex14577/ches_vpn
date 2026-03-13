@@ -40,6 +40,8 @@ class User(SQLModel, table=True):
 
     username: Optional[str] = Field(default=None, sa_column=Column(String(64)))
 
+    full_name: Optional[str] = Field(default=None, sa_column=Column(String(256)))
+
     subscription_token: str = Field(
         sa_column=Column(UUID(as_uuid=False), server_default=func.gen_random_uuid()))
 

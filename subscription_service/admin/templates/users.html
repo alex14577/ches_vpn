@@ -66,6 +66,7 @@
         <tr>
           <th>TG ID</th>
           <th>Username</th>
+          <th>Имя</th>
           <th>Refer</th>
           <th>Token</th>
           <th>Created</th>
@@ -77,6 +78,7 @@
         <tr>
           <td>{{ u.tg_user_id }}</td>
           <td>{{ u.username or '—' }}</td>
+          <td>{{ u.full_name or '—' }}</td>
           <td>{{ u.refer_id or '—' }}</td>
           <td style="max-width: 280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
             {{ u.subscription_token }}

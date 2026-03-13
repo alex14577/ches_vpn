@@ -41,7 +41,8 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not tg_user or not update.message:
         return
 
-    user: User = await db_call(lambda db: db.users.getOrCreate(tg_user.id, tg_user.username, refer_id=source))
+    full_name = " ".join(filter(None, [tg_user.first_name, tg_user.last_name])) or None
+    user: User = await db_call(lambda db: db.users.getOrCreate(tg_user.id, tg_user.username, refer_id=source, full_name=full_name))
     Logger.info("User start: tg_user_id=%s username=%s, source=\"%s\"", tg_user.id, tg_user.username, source or "")
     
     text, reply_markup = await main_menu.build_main_view(tg_user_id, tg_user.username)

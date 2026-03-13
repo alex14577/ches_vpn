@@ -6,6 +6,7 @@
   <div class="grid" style="grid-template-columns: 220px 1fr;">
     <div><strong>ID</strong></div><div>{{ user.id }}</div>
     <div><strong>TG user id</strong></div><div>{{ user.tg_user_id }}</div>
+    <div><strong>Имя</strong></div><div>{{ user.full_name or '—' }}</div>
     <div><strong>Subscription token</strong></div><div style="word-break: break-all;">{{ user.subscription_token }}</div>
     <div><strong>Created</strong></div><div>{{ user.created_at }}</div>
     <div><strong>Updated</strong></div><div>{{ user.updated_at }}</div>

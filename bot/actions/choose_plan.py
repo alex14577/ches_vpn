@@ -73,6 +73,7 @@ async def show_plan_details(
     tg_user_id: int,
     username: str | None,
     plan_code: str,
+    full_name: str | None = None,
 ) -> None:
     plan: Plan = await db_call(lambda db: db.plans.getByCode(plan_code))
     if plan is None or not plan.is_active:
@@ -85,7 +86,7 @@ async def show_plan_details(
         return
 
     async def work(db):
-        user = await db.users.getOrCreate(tg_user_id, username)
+        user = await db.users.getOrCreate(tg_user_id, username, full_name=full_name)
         active_sub = await db.subscriptions.active_for_user(user.id)
 
         if active_sub is not None and active_sub.valid_until is None:

@@ -18,8 +18,8 @@ from telegram.constants import ParseMode
 HTML = ParseMode.HTML
 
 
-async def _render_main_menu(query: CallbackQuery, tg_user_id, username: str | None) -> None:
-    text, reply_markup = await main_menu.build_main_view(tg_user_id, username)
+async def _render_main_menu(query: CallbackQuery, tg_user_id, username: str | None, full_name: str | None = None) -> None:
+    text, reply_markup = await main_menu.build_main_view(tg_user_id, username, full_name)
     if query.message and (
         query.message.photo
         or query.message.document
@@ -56,6 +56,7 @@ async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     tg_user_id = query.from_user.id
     username = query.from_user.username
+    full_name = " ".join(filter(None, [query.from_user.first_name, query.from_user.last_name])) or None
     match action:
         case "choose_plan":
             await choose_plan.show_plans(query, context)
@@ -63,7 +64,7 @@ async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         case _ if action.startswith("plan:"):
             plan_code = action.split(":", 1)[1]
-            await choose_plan.show_plan_details(query, context, tg_user_id, username, plan_code)
+            await choose_plan.show_plan_details(query, context, tg_user_id, username, plan_code, full_name)
             return
 
         case _ if action.startswith("payment_sent:"):
@@ -72,15 +73,15 @@ async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             return
 
         case "back_to_main":
-            await _render_main_menu(query, tg_user_id, username)
+            await _render_main_menu(query, tg_user_id, username, full_name)
             return
 
         case "connect_other_device":
-            await main_menu.render_other_device(query, tg_user_id, username)
+            await main_menu.render_other_device(query, tg_user_id, username, full_name)
             return
 
         case "copy_connect_link":
-            link_text, _ = await main_menu.build_other_device_view(tg_user_id, username)
+            link_text, _ = await main_menu.build_other_device_view(tg_user_id, username, full_name)
             if query.message:
                 await query.message.reply_text(
                     text=link_text,
@@ -89,7 +90,7 @@ async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             return
 
         case "refresh_main_menu":
-            await _render_main_menu(query, tg_user_id, username)
+            await _render_main_menu(query, tg_user_id, username, full_name)
             return
 
         case "faq_main_menu":
@@ -117,5 +118,5 @@ async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
         case _:
-            await _render_main_menu(query, tg_user_id, username)
+            await _render_main_menu(query, tg_user_id, username, full_name)
             return
