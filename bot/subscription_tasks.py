@@ -4,6 +4,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.error import Forbidden
 from telegram.ext import Application
 from sqlalchemy import select, update as sa_update
 
@@ -45,6 +46,8 @@ async def overdue_notification_task(app: Application) -> None:
                         ),
                     )
                     Logger.info("Overdue notification: sent to user %s", display)
+                except Forbidden:
+                    Logger.warning("Overdue notification: user %s blocked the bot, marking as notified", display)
                 except Exception:
                     Logger.exception("Failed to notify overdue subscription: sub_id=%s", sub.id)
                     continue
@@ -105,6 +108,8 @@ async def expiry_reminder_task(app: Application) -> None:
                         ),
                     )
                     Logger.info("Expiry reminder: sent to user %s", display)
+                except Forbidden:
+                    Logger.warning("Expiry reminder: user %s blocked the bot, marking as reminded", display)
                 except Exception:
                     Logger.exception("Failed to send expiry reminder: sub_id=%s", sub.id)
                     continue
@@ -158,6 +163,8 @@ async def expired_notification_task(app: Application) -> None:
                         ),
                     )
                     Logger.info("Expired notification: sent to user %s", display)
+                except Forbidden:
+                    Logger.warning("Expired notification: user %s blocked the bot, marking as notified", display)
                 except Exception:
                     Logger.exception("Failed to send expired notification: sub_id=%s", sub.id)
                     continue
