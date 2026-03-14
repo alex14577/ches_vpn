@@ -29,5 +29,5 @@ WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'vpn_subscription_username
 GRANT sub_reader TO :"vpn_subscription_username";
 
 GRANT USAGE ON SCHEMA public TO :"vpn_bot_username", :"vpn_pay_verifier_username", :"vpn_subscription_username";
-GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO :"vpn_bot_username", :"vpn_pay_verifier_username", :"vpn_subscription_username";
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO :"vpn_bot_username", :"vpn_pay_verifier_username", :"vpn_subscription_username";
 GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO :"vpn_bot_username", :"vpn_pay_verifier_username", :"vpn_subscription_username";
