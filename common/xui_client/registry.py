@@ -278,11 +278,16 @@ class Manager:
                 client = mc.client
                 inbounds = await client.inbounds()
 
+                removed = False
                 for inbound in inbounds:
                     if any(c.id == user_id_str for c in inbound.settings.clients):
                         await client.delClient(inbound.id, user_id_str)
+                        removed = True
 
-                Logger.info('User "%s" removed from server "%s"', display_name, client.cfg.api_base_url)
+                if removed:
+                    Logger.info('User "%s" removed from server "%s"', display_name, client.cfg.api_base_url)
+                else:
+                    Logger.info('User "%s" not found on server "%s" (nothing to remove)', display_name, client.cfg.api_base_url)
 
         results = await asyncio.gather(*(del_one(mc) for mc in self._clients.values()), return_exceptions=True)
         for r in results:

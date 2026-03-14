@@ -16,8 +16,10 @@ class AccessSyncService:
         self._interval_seconds = max(60, int(interval_seconds))
 
     async def run_once(self) -> None:
+        Logger.info("Access sync: starting run")
         active_users: list[User] = await db_call(lambda db: db.users.active_subscription_users())
         active_ids = {u.id for u in active_users}
+        Logger.info("Access sync: %d active user(s) in DB", len(active_ids))
 
         await self._manager.sync_servers_now()
 
@@ -31,10 +33,11 @@ class AccessSyncService:
                     Logger.warning("sync_user partial failure: %s", r)
 
         server_ids = await self._manager.list_user_ids()
+        Logger.info("Access sync: %d user(s) on servers", len(server_ids))
         stale_ids = server_ids - active_ids
 
         if not stale_ids:
-            Logger.info("Access sync: %d active user(s), nothing to remove", len(active_ids))
+            Logger.info("Access sync: nothing to remove")
             return
 
         stale_users = await db_call(lambda db: db.users.by_ids(stale_ids))
@@ -44,9 +47,10 @@ class AccessSyncService:
         for user_id in stale_ids:
             user = stale_map.get(user_id)
             if user:
-                display_name = user.username or str(user.tg_user_id)
+                display_name = user.full_name or user.username or str(user.tg_user_id)
             else:
                 display_name = str(user_id)
+            Logger.info("Access sync: removing stale user %s (id=%s)", display_name, user_id)
             tasks.append(self._manager.del_user_id(user_id, display_name=display_name))
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -55,7 +59,7 @@ class AccessSyncService:
                 Logger.warning("del_user_id partial failure: %s", r)
 
         Logger.info(
-            "Access sync: %d active user(s), %d removed",
+            "Access sync: done — %d active, %d removed",
             len(active_ids),
             len(stale_ids),
         )

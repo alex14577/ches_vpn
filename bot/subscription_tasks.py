@@ -31,6 +31,8 @@ async def overdue_notification_task(app: Application) -> None:
 
             rows = await db_call(work)
             for sub, user in rows:
+                display = user.full_name or user.username or str(user.tg_user_id)
+                Logger.info("Overdue notification: sending to user %s (sub_id=%s)", display, sub.id)
                 try:
                     await app.bot.send_message(
                         chat_id=user.tg_user_id,
@@ -42,6 +44,7 @@ async def overdue_notification_task(app: Application) -> None:
                             [[InlineKeyboardButton("Продлить", callback_data="choose_plan")]]
                         ),
                     )
+                    Logger.info("Overdue notification: sent to user %s", display)
                 except Exception:
                     Logger.exception("Failed to notify overdue subscription: sub_id=%s", sub.id)
                     continue
@@ -87,6 +90,8 @@ async def expiry_reminder_task(app: Application) -> None:
 
             rows = await db_call(work)
             for sub, user, plan in rows:
+                display = user.full_name or user.username or str(user.tg_user_id)
+                Logger.info("Expiry reminder: sending to user %s, plan=%s, valid_until=%s", display, plan.title, sub.valid_until)
                 try:
                     await app.bot.send_message(
                         chat_id=user.tg_user_id,
@@ -99,6 +104,7 @@ async def expiry_reminder_task(app: Application) -> None:
                             [[InlineKeyboardButton("Продлить", callback_data="choose_plan")]]
                         ),
                     )
+                    Logger.info("Expiry reminder: sent to user %s", display)
                 except Exception:
                     Logger.exception("Failed to send expiry reminder: sub_id=%s", sub.id)
                     continue
@@ -138,6 +144,8 @@ async def expired_notification_task(app: Application) -> None:
 
             rows = await db_call(work)
             for sub, user, plan in rows:
+                display = user.full_name or user.username or str(user.tg_user_id)
+                Logger.info("Expired notification: sending to user %s, plan=%s, valid_until=%s", display, plan.title, sub.valid_until)
                 try:
                     await app.bot.send_message(
                         chat_id=user.tg_user_id,
@@ -149,6 +157,7 @@ async def expired_notification_task(app: Application) -> None:
                             [[InlineKeyboardButton("Продлить", callback_data="choose_plan")]]
                         ),
                     )
+                    Logger.info("Expired notification: sent to user %s", display)
                 except Exception:
                     Logger.exception("Failed to send expired notification: sub_id=%s", sub.id)
                     continue
